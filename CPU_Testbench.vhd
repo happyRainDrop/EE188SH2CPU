@@ -127,7 +127,7 @@ begin
         WE1 <= '1';
         WE2 <= '1';
         WE3 <= '1';
-        
+
         -------------------------------------------------------------------- DONE
 
         -- Read all memory contents
@@ -142,17 +142,21 @@ begin
             for j in 0 to memBlockWordSize-1 loop   -- Looping over addresses in memory blocks
 
                 -- Read bytes individually
-                SH2AddressBus <= std_logic_vector(to_unsigned((i * memBlockWordSize) + j, 32)); 
+                SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
                 wait for 1 ns;
                 RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; wait for 10 ns;
 
                 write(L, string'("Addr "));
+                write(L, i);
+                write(L, string'(", "));
+                write(L, j);
+                write(L, string'(": "));
                 write(L, i * memBlockWordSize + j, right, 3);
                 write(L, string'(": "));
                 write(L, SH2DataBus);
                 writeline(mem_dump, L);
 
-                RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; wait for 1 ns;
+                RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; wait for 10 ns;
             end loop;
         end loop;
 

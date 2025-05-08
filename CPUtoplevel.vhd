@@ -31,7 +31,7 @@ use ieee.std_logic_1164.ALL;
 package SH2_CPU_Constants is
 
     -- Memory instantiation
-    constant memBlockWordSize : integer := 4;  -- 4 words in every memory block
+    constant memBlockWordSize : integer := 8;  -- 4 words in every memory block
 
     -- Register and word size configuration
     constant regLen       : integer := 32;   -- Each register is 32 bits

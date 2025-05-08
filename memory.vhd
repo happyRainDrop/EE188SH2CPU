@@ -121,6 +121,7 @@ begin
         -- wait for an input to change
         wait on  RE, RE0, RE1, RE2, RE3, WE, WE0, WE1, WE2, WE3, MemAB;
 
+
         -- first check if reading
         if  (RE = '0')  then
             -- reading, put the data out (check the address)
@@ -154,6 +155,17 @@ begin
             if  RE3 /= '0'  then
                 MemDB(31 downto 24) <= (others => 'Z');
             end if;
+
+            for j in 0 to MEMSIZE-1 loop   -- Looping over addresses in memory blocks
+
+                report "  READING ram0:" & to_hstring(RAMbits0(j));
+                report "  READING ram1:" & to_hstring(RAMbits1(j));
+                report "  READING ram2:" & to_hstring(RAMbits2(j));
+                report "  READING ram3:" & to_hstring(RAMbits3(j));
+                report "===============================";
+            
+            end loop;
+            report "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
 
         else
 
@@ -220,6 +232,17 @@ begin
 
             -- wait for the update to happen
             wait for 0 ns;
+
+            for j in 0 to MEMSIZE-1 loop   -- Looping over addresses in memory blocks
+
+                report "  WRITING ram0:" & to_hstring(RAMbits0(j));
+                report "  WRITING ram1:" & to_hstring(RAMbits1(j));
+                report "  WRITING ram2:" & to_hstring(RAMbits2(j));
+                report "  WRITING ram3:" & to_hstring(RAMbits3(j));
+                report "===============================";
+            
+            end loop;
+            report "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
 
         end if;
 
