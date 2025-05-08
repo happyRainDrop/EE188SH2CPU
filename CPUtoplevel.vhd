@@ -22,6 +22,7 @@
 --     16 Apr 25  Ruth Berkun       Initial revision. Added SH2RegArray, ALU, DMAU, PMAU integration.
 --      7 May 35  Ruth Berkun       Restructure to have ctrl signals to say what updates 
 --                                  SH2DataBus and SH2AddressBus buses
+--      7 May 25  Ruth Berkun       Instantiate external memory
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -239,10 +240,23 @@ use work.array_type_pkg.all;
 
 entity CPUtoplevel is
     port(
+        
+        Reset   :  in     std_logic;                       -- reset signal (active low)
+        NMI     :  in     std_logic;                       -- non-maskable interrupt signal (falling edge)
+        INT     :  in     std_logic;                       -- maskable interrupt signal (active low)
+
+        RE0     :  out    std_logic;                       -- first byte active low read enable
+        RE1     :  out    std_logic;                       -- second byte active low read enable
+        RE2     :  out    std_logic;                       -- third byte active low read enable
+        RE3     :  out    std_logic;                       -- fourth byte active low read enable
+        WE0     :  out    std_logic;                       -- first byte active low write enable
+        WE1     :  out    std_logic;                       -- second byte active low write enable
+        WE2     :  out    std_logic;                       -- third byte active low write enable
+        WE3     :  out    std_logic;                       -- fourth byte active low write enable
 
         SH2clock      : in std_logic;
-        SH2DataBus : buffer  std_logic_vector(regLen - 1 downto 0);   -- DMAU output address
-        SH2AddressBus : buffer  std_logic_vector(regLen - 1 downto 0)   -- PMAU output address
+        SH2DataBus : buffer  std_logic_vector(regLen - 1 downto 0);   -- stores data to read/write from memory
+        SH2AddressBus : buffer  std_logic_vector(regLen - 1 downto 0)   -- stores address to read/write from memory
 
 
     );
@@ -321,6 +335,28 @@ architecture Structural of CPUtoplevel is
     signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0);
 
 begin
+
+    -- Instantiate memory unit
+    SH2ExternalMemory : entity work.MEMORY32x32
+        generic map (
+            MEMSIZE     => 256,
+            START_ADDR0 => 0,
+            START_ADDR1 => 256,
+            START_ADDR2 => 512,
+            START_ADDR3 => 1024
+        )
+        port map (
+            RE0    => RE0,
+            RE1    => RE1,
+            RE2    => RE2,
+            RE3    => RE3, 
+            WE0    => WE0, 
+            WE1    => WE1, 
+            WE2    => WE2, 
+            WE3    => WE3, 
+            MemAB  => SH2AddressBus, 
+            MemDB  => SH2DataBus 
+        );
 
     -- Instantiate register array
     SH2RegArray : entity work.SH2RegArray
