@@ -22,6 +22,7 @@
 --     16 Apr 25  Ruth Berkun       Initial revision. Added SH2RegArray, ALU, DMAU, PMAU integration.
 --      7 May 35  Ruth Berkun       Restructure to have ctrl signals to say what updates 
 --                                  SH2DataBus and SH2AddressBus buses
+--      TESTING
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
