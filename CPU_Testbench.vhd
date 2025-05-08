@@ -9,6 +9,7 @@ end CPU_Testbench;
 
 architecture behavior of CPU_Testbench is
 
+    constant memBlockWordSize : integer := 4;
     constant regLen : integer := 32;
 
     component CPUtoplevel
@@ -72,6 +73,7 @@ begin
 
     -- Test sequence
     stimulus: process
+        variable L : line;
     begin
 
         -- Reset (active low)
@@ -80,8 +82,8 @@ begin
         Reset <= '1';
 
         -- Write FF FF FF FF to address 0
-        SH2AddressBus <= x"00000000";
-        SH2DataBus    <= x"FFFFFFFF";
+        SH2AddressBus <= "00000000000000000000000000000000";
+        SH2DataBus    <= "00000000000000000000000000000001";
 
         WE0 <= '0';
         WE1 <= '0';
@@ -100,17 +102,17 @@ begin
         wait for 20 ns;
 
         -- Read all memory contents
-        variable L : line;
         write(L, string'("Memory Dump by Block (32 words each):")); 
         writeline(mem_dump, L);
 
-        for i in 0 to 3 loop        -- Loop over memory blocks
+        for i in 0 to 1 loop        -- Loop over memory blocks
 
             write(L, string'("===============================")); 
             writeline(mem_dump, L);
 
-            for j in 0 to 31 loop
-                SH2AddressBus <= std_logic_vector(to_unsigned((i * 256) + j, 32)); 
+            for j in 0 to 1 loop   -- Looping over addresses in memory blocks
+
+                SH2AddressBus <= std_logic_vector(to_unsigned((i * memBlockWordSize) + j, 32)); 
                 wait for 10 ns;
 
                 -- Read bytes individually

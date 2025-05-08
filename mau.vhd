@@ -32,14 +32,6 @@
 library ieee;
 use ieee.std_logic_1164.all;
 
-package array_type_pkg is
-
---  a 2D array of std_logic (VHDL-2008)
-   type  std_logic_array  is  array (natural range<>) of std_logic_vector;
-
-
-end package;
-
 
 
 --
@@ -63,46 +55,14 @@ package MemUnitConstants is
 end package;
 
 
-
---
---  AdderBit
---
---  This is a bit of the adder for doing addition in the ALU.
---
---  Inputs:
---    A  - first operand bit (bus A)
---    B  - second operand bit (bus B)
---    Ci - carry in (from previous bit)
---
---  Outputs:
---    S  - sum for this bit
---    Co - carry out for this bit
---
-
 library ieee;
-use ieee.std_logic_1164.all;
+use ieee.std_logic_1164.ALL;
+use ieee.numeric_std.all;
+package array_type_pkg is
+   --  a 2D array of std_logic (VHDL-2008)
+   type  std_logic_array  is  array (natural range<>) of std_logic_vector;
 
-entity  AdderBit  is
-
-    port(
-        A  : in   std_logic;        -- first operand
-        B  : in   std_logic;        -- second operand
-        Ci : in   std_logic;        -- carry in from previous bit
-        S  : out  std_logic;        -- sum (result)
-        Co : out  std_logic         -- carry out to next bit
-    );
-
-end  AdderBit;
-
-
-architecture  dataflow  of  AdderBit  is
-begin
-
-    S  <=  A  xor  B  xor  Ci;
-    Co <=  (A  and  B)  or  (A  and Ci)  or  (B  and  Ci);
-
-end  dataflow;
-
+end package;
 
 
 --

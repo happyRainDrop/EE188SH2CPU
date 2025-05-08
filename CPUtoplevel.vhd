@@ -30,6 +30,9 @@ library ieee;
 use ieee.std_logic_1164.ALL;
 package SH2_CPU_Constants is
 
+    -- Memory instantiation
+    constant memBlockWordSize : integer := 4;  -- 4 words in every memory block
+
     -- Register and word size configuration
     constant regLen       : integer := 32;   -- Each register is 32 bits
     constant regCount     : integer := 21;   -- 16 general + 5 special registers
@@ -224,15 +227,6 @@ end SH2_IR_Constants;
 library ieee;
 use ieee.std_logic_1164.ALL;
 use ieee.numeric_std.all;
-package array_type_pkg is
-   --  a 2D array of std_logic (VHDL-2008)
-   type  std_logic_array  is  array (natural range<>) of std_logic_vector;
-
-end package;
-
-library ieee;
-use ieee.std_logic_1164.ALL;
-use ieee.numeric_std.all;
 use work.SH2_CPU_Constants.all;
 use work.SH2_IR_Constants.all;
 use work.array_type_pkg.all;
@@ -339,11 +333,11 @@ begin
     -- Instantiate memory unit
     SH2ExternalMemory : entity work.MEMORY32x32
         generic map (
-            MEMSIZE     => 256,
-            START_ADDR0 => 0,
-            START_ADDR1 => 256,
-            START_ADDR2 => 512,
-            START_ADDR3 => 1024
+            MEMSIZE     => memBlockWordSize,
+            START_ADDR0 => (0 * memBlockWordSize),
+            START_ADDR1 => (1 * memBlockWordSize),
+            START_ADDR2 => (2 * memBlockWordSize),
+            START_ADDR3 => (3 * memBlockWordSize)
         )
         port map (
             RE0    => RE0,
