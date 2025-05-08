@@ -15,6 +15,10 @@
 --      3 May 25  Ruth Berkun       Fixed remaining syntax errors. Primarily
 --                                  parentheses mismatch and lack of parentheses around "others"
 --      3 May 25  Ruth Berkun       Replaced "4*RAM_SIZE" with "MEMSIZE"
+--      7 May 25  Ruth Berkun       Assert WE active low ("if  (WE'event and (WE = '0'))" instead of WE = 1)
+--                                  Replaced CONV_INTEGER with to_integer
+--      8 May 25  Ruth Berkun       GLENNNNNN WHYYYYYYYYY: Mismatched "end if"
+--                                  Missing "end if"
 ----------------------------------------------------------------------------
 
 
@@ -55,6 +59,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_unsigned.all;
 use ieee.numeric_std.all;
+use ieee.std_logic_textio.all;  -- Needed for to_hstring
 
 
 entity  MEMORY32x32  is
@@ -116,6 +121,13 @@ begin
         -- wait for an input to change
         wait on  RE, RE0, RE1, RE2, RE3, WE, WE0, WE1, WE2, WE3, MemAB;
 
+        report "MemAB = " & to_hstring(MemAB);
+        report "MemDB = " & to_hstring(MemDB);
+        report "RamBits00 = " & to_hstring(RAMbits0(0));
+        report "RE = " & std_logic'image(RE);
+        report "WE = " & std_logic'image(WE);
+        report "===================";
+
         -- first check if reading
         if  (RE = '0')  then
             -- reading, put the data out (check the address)
@@ -150,6 +162,8 @@ begin
                 MemDB(31 downto 24) <= (others => 'Z');
             end if;
 
+            report "finished reading!!";
+
         else
 
             -- not reading, send data bus to hi-Z
@@ -157,7 +171,8 @@ begin
         end if;
 
         -- now check if writing
-        if  (WE'event and (WE = '1'))  then
+        if  (WE'event and (WE = '0'))  then
+
             -- rising edge of write - write the data (check which address range)
             -- first get current value of the byte
             if  ((to_integer(unsigned(MemAB)) >= START_ADDR0) and
@@ -174,11 +189,14 @@ begin
                 MemData <= RAMbits3(to_integer(unsigned(MemAB(31 downto 2) - START_ADDR3 / 4)));
             else
                 MemData <= (others => 'X');
+            end if;
 
             -- now update the data based on the write enable signals
             -- set any byte being written to its new value
             if  WE0 = '0'  then
                 MemData(7 downto 0) <= MemDB(7 downto 0);
+                report "    MemData(7 downto 0) = " & to_hstring( MemData(7 downto 0));
+                report "    MemDB(7 downto 0) = " & to_hstring( MemDB(7 downto 0));
             end if;
             if  WE1 = '0'  then
                 MemData(15 downto 8) <= MemDB(15 downto 8);
@@ -190,19 +208,21 @@ begin
                 MemData(31 downto 24) <= MemDB(31 downto 24);
             end if;
 
+            report "\tMemData = " & to_hstring(MemData);
+
             -- finally write the updated value to memory
             if  ((to_integer(unsigned(MemAB)) >= START_ADDR0) and
                  (to_integer(unsigned(MemAB - START_ADDR0)) < (MEMSIZE)))  then
-                RAMbits0(CONV_INTEGER(MemAB(31 downto 2)) - START_ADDR0 / 4) <= MemData;
+                RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4)) <= MemData;
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR1) and
                     (to_integer(unsigned(MemAB - START_ADDR1)) < (MEMSIZE)))  then
-                RAMbits1(CONV_INTEGER(MemAB(31 downto 2)) - START_ADDR1 / 4) <= MemData;
+                RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4)) <= MemData;
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR2) and
                     (to_integer(unsigned(MemAB - START_ADDR2)) < (MEMSIZE)))  then
-                RAMbits2(CONV_INTEGER(MemAB(31 downto 2)) - START_ADDR2 / 4) <= MemData;
+                RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4)) <= MemData;
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR3) and
                     (to_integer(unsigned(MemAB - START_ADDR3)) < (MEMSIZE)))  then
-                RAMbits3(CONV_INTEGER(MemAB(31 downto 2)) - START_ADDR3 / 4) <= MemData;
+                RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4)) <= MemData;
             else
                 -- outside of any allowable address range - generate an error
                 assert (false)
@@ -213,6 +233,10 @@ begin
             -- wait for the update to happen
             wait for 0 ns;
 
+            report "finished writing:";
+            report "\tMemDB = " & to_hstring(MemDB);
+            report "\tRamBits0 = " & to_hstring(RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4)));
+
         end if;
 
         -- finally check if WE low with the address changing
@@ -220,7 +244,6 @@ begin
             -- output error message
             REPORT "Glitch on Memory Address bus"
             SEVERITY  ERROR;
-            end if;
         end if;
 
     end process;

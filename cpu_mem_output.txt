@@ -1,0 +1,7 @@
+Memory Dump by Block (32 words each):
+===============================
+Addr   0: UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU
+Addr   0: UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU
+===============================
+Addr   1: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+Addr   1: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

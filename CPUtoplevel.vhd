@@ -230,6 +230,7 @@ use ieee.numeric_std.all;
 use work.SH2_CPU_Constants.all;
 use work.SH2_IR_Constants.all;
 use work.array_type_pkg.all;
+use ieee.std_logic_textio.all;  -- Needed for to_hstring
 
 
 entity CPUtoplevel is
@@ -262,75 +263,75 @@ architecture Structural of CPUtoplevel is
     -- Control Signals --
     ------------------------------------------------------------------------------------------------------------------
     -- REG ARRAY FROM CONTROL UNIT INPUTS (for selecting reg in/out control)
-    signal SH2RegIn      : std_logic_vector(regLen - 1 downto 0);
-    signal SH2RegInSel   : integer  range regCount - 1 downto 0;
-    signal SH2RegStore   : std_logic;
-    signal SH2RegASel    : integer  range regCount - 1 downto 0;
-    signal SH2RegBSel    : integer  range regCount - 1 downto 0;
-    signal SH2RegAx : std_logic_vector(regLen - 1 downto 0);
-    signal SH2RegAxIn    : std_logic_vector(regLen - 1 downto 0);
-    signal SH2RegAxInSel : integer  range regCount - 1 downto 0;
-    signal SH2RegAxStore : std_logic;
-    signal SH2RegA1Sel   : integer  range regCount - 1 downto 0;
-    signal SH2RegA2Sel   : integer  range regCount - 1 downto 0;
+    signal SH2RegIn      : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    signal SH2RegInSel   : integer  range regCount - 1 downto 0 := 0;
+    signal SH2RegStore   : std_logic := '0';
+    signal SH2RegASel    : integer  range regCount - 1 downto 0 := 0;
+    signal SH2RegBSel    : integer  range regCount - 1 downto 0 := 0;
+    signal SH2RegAx      : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    signal SH2RegAxIn    : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    signal SH2RegAxInSel : integer  range regCount - 1 downto 0 := 0;
+    signal SH2RegAxStore : std_logic := '0';
+    signal SH2RegA1Sel   : integer  range regCount - 1 downto 0 := 0;
+    signal SH2RegA2Sel   : integer  range regCount - 1 downto 0 := 0;
     ------------------------------------------------------------------------------------------------------------------
     -- ALU FROM CONTROL UNIT INPUTS (for ALU operation control)
-    signal SH2FCmd     : std_logic_vector(3 downto 0);              -- F-Block operation
-    signal SH2CinCmd   : std_logic_vector(1 downto 0);              -- carry in operation
-    signal SH2SCmd     : std_logic_vector(2 downto 0);              -- shift operation
-    signal SH2ALUCmd   : std_logic_vector(1 downto 0);              -- ALU result select
+    signal SH2FCmd     : std_logic_vector(3 downto 0) := (others => '0');         -- F-Block operation
+    signal SH2CinCmd   : std_logic_vector(1 downto 0) := (others => '0');         -- carry in operation
+    signal SH2SCmd     : std_logic_vector(2 downto 0) := (others => '0');         -- shift operation
+    signal SH2ALUCmd   : std_logic_vector(1 downto 0) := (others => '0');         -- ALU result select
     -- ALU additional from control line inputs (not directly from generic ALU)
-    signal SH2ALUImmediateOperand : std_logic_vector(regLen-1 downto 0);    -- control unit should pad it (with 1s or 0s
-                                                                     -- based on whether it's signed or not)
-                                                                     -- before giving us immediate operand
-    signal SH2ALUUseImmediateOperand : std_logic_vector(regLen-1 downto 0); -- 1 for use immediate operand, 0 otherwise
+    signal SH2ALUImmediateOperand      : std_logic_vector(regLen-1 downto 0) := (others => '0'); -- control unit should pad it (with 1s or 0s
+                                                                                                -- based on whether it's signed or not)
+                                                                                                -- before giving us immediate operand
+    signal SH2ALUUseImmediateOperand   : std_logic_vector(regLen-1 downto 0) := (others => '0'); -- 1 for use immediate operand, 0 otherwise
     -- ALU OUTPUTS
-    signal SH2ALUResult   : std_logic_vector(regLen - 1 downto 0);   -- ALU result
-    signal FlagBus : std_logic_vector(4 downto 0); -- Flags are Cout, HalfCout, Overflow, Zero, Sign
+    signal SH2ALUResult   : std_logic_vector(regLen - 1 downto 0) := (others => '0');            -- ALU result
+    signal FlagBus        : std_logic_vector(4 downto 0) := (others => '0');                     -- Flags are Cout, HalfCout, Overflow, Zero, Sign
     ------------------------------------------------------------------------------------------------------------------
     -- DMAU FROM CONTROL LINE INPUTS
-    signal SH2DMAUSrcSel     : integer  range dmauSourceCount - 1 downto 0;
-    signal SH2DMAUOffsetSel  : integer  range dmauOffsetCount - 1 downto 0;
-    signal SH2DMAUIncDecSel  : std_logic;
-    signal SH2DMAUIncDecBit  : integer  range maxIncDecBitDMAU downto 0;
-    signal SH2DMAUPrePostSel : std_logic;
+    signal SH2DMAUSrcSel     : integer  range dmauSourceCount - 1 downto 0 := 0;
+    signal SH2DMAUOffsetSel  : integer  range dmauOffsetCount - 1 downto 0 := 0;
+    signal SH2DMAUIncDecSel  : std_logic := '0';
+    signal SH2DMAUIncDecBit  : integer  range maxIncDecBitDMAU downto 0 := 0;
+    signal SH2DMAUPrePostSel : std_logic := '0';
     -- DMAU added inputs (not directly from generic MAU)
-    signal DMAUImmediateSource :  std_logic_vector(regLen-1 downto 0);
-    signal DMAUImmediateOffset :  std_logic_vector(regLen-1 downto 0);
+    signal DMAUImmediateSource :  std_logic_vector(regLen-1 downto 0) := (others => '0');
+    signal DMAUImmediateOffset :  std_logic_vector(regLen-1 downto 0) := (others => '0');
     -- DMAU OUTPUTS
-    signal SH2DataAddressBus :   std_logic_vector(regLen - 1 downto 0);   -- DMAU input address, updated
-                                                                            -- (Need control line to see which src)
-    signal SH2DataAddressSrc :   std_logic_vector(regLen - 1 downto 0);   -- DMAU input address, updated
-    -- (Need control line to see which src)
+    signal SH2DataAddressBus : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
+                                                                                        -- (Need control line to see which src)
+    signal SH2DataAddressSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
+                                                                                        -- (Need control line to see which src)
     -------------------------------------------------------------------------------------
     -- PMAU FROM CONTROL LINE INPUTS
-    signal SH2PMAUSrcSel     : integer  range pmauSourceCount - 1 downto 0;
-    signal SH2PMAUOffsetSel  : integer  range pmauOffsetCount - 1 downto 0;
-    signal SH2PMAUIncDecSel  : std_logic;
-    signal SH2PMAUIncDecBit  : integer  range maxIncDecBitPMAU downto 0;
-    signal SH2PMAUPrePostSel : std_logic;
+    signal SH2PMAUSrcSel     : integer  range pmauSourceCount - 1 downto 0 := 0;
+    signal SH2PMAUOffsetSel  : integer  range pmauOffsetCount - 1 downto 0 := 0;
+    signal SH2PMAUIncDecSel  : std_logic := '0';
+    signal SH2PMAUIncDecBit  : integer  range maxIncDecBitPMAU downto 0 := 0;
+    signal SH2PMAUPrePostSel : std_logic := '0';
     -- PMAU added inputs (not directly from generic MAU)
-    signal PMAUImmediateSource : std_logic_vector(regLen-1 downto 0);
-    signal PMAUImmediateOffset : std_logic_vector(regLen-1 downto 0);
+    signal PMAUImmediateSource : std_logic_vector(regLen-1 downto 0) := (others => '0');
+    signal PMAUImmediateOffset : std_logic_vector(regLen-1 downto 0) := (others => '0');
     -- PMAU OUTPUTS
-    signal SH2ProgramAddressBus : std_logic_vector(regLen - 1 downto 0);   -- PMAU input address, updated
-                                                                            -- (Control unit uses to update PC)
-    signal SH2ProgramAddressSrc : std_logic_vector(regLen - 1 downto 0);   -- PMAU input address, updated
-                                                                            -- (Control unit uses to update PC) 
+    signal SH2ProgramAddressBus : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- PMAU input address, updated
+                                                                                            -- (Control unit uses to update PC)
+    signal SH2ProgramAddressSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- PMAU input address, updated
+                                                                                            -- (Control unit uses to update PC) 
     ------------------------------------------------------------------------------------------
     -- CONTROL OUTPUTS
-    signal SH2SelDataBus : integer range NUM_DATA_BUS_OPTIONS downto 0; -- do not update, update with reg output, or update with ALU output
-    signal SH2SelAddressBus : integer range NUM_ADDRESS_BUS_OPTIONS downto 0; -- do not update, update with PMAU address out, or update with DMAU address out
+    signal SH2SelDataBus    : integer range NUM_DATA_BUS_OPTIONS downto 0 := HOLD_DATA_BUS;     -- do not update, update with reg output, or update with ALU output
+    signal SH2SelAddressBus : integer range NUM_ADDRESS_BUS_OPTIONS downto 0 := HOLD_ADDRESS_BUS;  -- do not update, update with PMAU address out, or update with DMAU address out
 
     -- Outputs of registers; get hooked up to ALU and PMAU and DMAU
-    signal RegArrayOutA : std_logic_vector(regLen - 1 downto 0);
-    signal RegArrayOutB : std_logic_vector(regLen - 1 downto 0);
-    signal RegArrayOutA1 : std_logic_vector(regLen - 1 downto 0);
-    signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0);
+    signal RegArrayOutA  : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    signal RegArrayOutB  : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    signal RegArrayOutA1 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+
 
 begin
 
-    -- Instantiate memory unit
     SH2ExternalMemory : entity work.MEMORY32x32
         generic map (
             MEMSIZE     => memBlockWordSize,
@@ -403,7 +404,7 @@ begin
             SH2DMAUIncDecSel  => SH2DMAUIncDecSel, 
             SH2DMAUIncDecBit  => SH2DMAUIncDecBit, 
             SH2DMAUPrePostSel => SH2DMAUPrePostSel, 
-            SH2DataAddressBus => SH2AddressBus,       -- just GBR?
+            SH2DataAddressBus => SH2DataAddressBus,       -- just GBR?
             SH2DataAddressSrc => SH2DataAddressSrc
         );
 
@@ -421,16 +422,7 @@ begin
             SH2PMAUPrePostSel => SH2PMAUPrePostSel, 
             SH2ProgramAddressBus => RegArrayOutA,        --make the PC come out into here
             SH2ProgramAddressSrc => SH2ProgramAddressSrc
-        );
-
-    -- Set buses
-    SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
-        RegArrayOutA when SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT else
-        SH2ALUResult;
-
-    SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
-        SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
-        SH2ProgramAddressSrc;
+        );    
 
 
 end Structural;

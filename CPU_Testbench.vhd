@@ -21,7 +21,7 @@ architecture behavior of CPU_Testbench is
             WE0, WE1, WE2, WE3 : out std_logic;
             SH2clock       : in  std_logic;
             SH2DataBus     : buffer std_logic_vector(regLen - 1 downto 0);
-            SH2AddressBus  : buffer std_logic_vector(regLen - 1 downto 0)
+            SH2AddressBus  : inout std_logic_vector(regLen - 1 downto 0)
         );
     end component;
 
@@ -32,8 +32,8 @@ architecture behavior of CPU_Testbench is
     signal RE0, RE1, RE2, RE3 : std_logic;
     signal WE0, WE1, WE2, WE3 : std_logic;
     signal SH2clock       : std_logic := '0';
-    signal SH2DataBus     : std_logic_vector(regLen - 1 downto 0) := (others => 'Z');
-    signal SH2AddressBus  : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    signal SH2DataBus     : std_logic_vector(regLen - 1 downto 0);
+    signal SH2AddressBus  : std_logic_vector(regLen - 1 downto 0);
 
     -- Internal memory access (assumes internal memory is accessible)
     signal RAMbits0, RAMbits1, RAMbits2, RAMbits3 : std_logic_vector(31 downto 0);
@@ -82,22 +82,33 @@ begin
         Reset <= '1';
 
         -- Write FF FF FF FF to address 0
-        SH2AddressBus <= "00000000000000000000000000000000";
-        SH2DataBus    <= "00000000000000000000000000000001";
+        SH2AddressBus <= x"00000000";
+        SH2DataBus    <= x"01010101";
+
+        -- Turn off read
+        RE0 <= '1';
+        RE1 <= '1';
+        RE2 <= '1';
+        RE3 <= '1';
+
+        report "writing";
+        report "SH2AddressBus = " & to_hstring(SH2AddressBus);
 
         WE0 <= '0';
         WE1 <= '0';
         WE2 <= '0';
         WE3 <= '0';
-        wait for 10 ns;
+        wait for 200 ns;
 
+        SH2DataBus <= (others => 'Z');
+
+        report "done writing";
+        report "SH2AddressBus = " & to_hstring(SH2AddressBus);
         -- Turn off write
         WE0 <= '1';
         WE1 <= '1';
         WE2 <= '1';
         WE3 <= '1';
-
-        SH2DataBus <= (others => 'Z');
 
         wait for 20 ns;
 
@@ -112,20 +123,22 @@ begin
 
             for j in 0 to 1 loop   -- Looping over addresses in memory blocks
 
-                SH2AddressBus <= std_logic_vector(to_unsigned((i * memBlockWordSize) + j, 32)); 
-                wait for 10 ns;
-
                 -- Read bytes individually
-                RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; wait for 10 ns;
-                RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; wait for 1 ns;
+                SH2AddressBus <= std_logic_vector(to_unsigned((i * memBlockWordSize) + j, 32)); 
+                wait for 1 ns;
+                RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; wait for 20 ns;
 
                 write(L, string'("Addr "));
                 write(L, i, right, 3);
                 write(L, string'(": "));
                 write(L, SH2DataBus);
                 writeline(mem_dump, L);
+
+                RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; wait for 1 ns;
             end loop;
         end loop;
+
+        file_close(mem_dump);
 
         wait;
 
