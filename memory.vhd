@@ -121,13 +121,6 @@ begin
         -- wait for an input to change
         wait on  RE, RE0, RE1, RE2, RE3, WE, WE0, WE1, WE2, WE3, MemAB;
 
-        report "MemAB = " & to_hstring(MemAB);
-        report "MemDB = " & to_hstring(MemDB);
-        report "RamBits00 = " & to_hstring(RAMbits0(0));
-        report "RE = " & std_logic'image(RE);
-        report "WE = " & std_logic'image(WE);
-        report "===================";
-
         -- first check if reading
         if  (RE = '0')  then
             -- reading, put the data out (check the address)
@@ -162,8 +155,6 @@ begin
                 MemDB(31 downto 24) <= (others => 'Z');
             end if;
 
-            report "finished reading!!";
-
         else
 
             -- not reading, send data bus to hi-Z
@@ -195,8 +186,6 @@ begin
             -- set any byte being written to its new value
             if  WE0 = '0'  then
                 MemData(7 downto 0) <= MemDB(7 downto 0);
-                report "    MemData(7 downto 0) = " & to_hstring( MemData(7 downto 0));
-                report "    MemDB(7 downto 0) = " & to_hstring( MemDB(7 downto 0));
             end if;
             if  WE1 = '0'  then
                 MemData(15 downto 8) <= MemDB(15 downto 8);
@@ -226,16 +215,11 @@ begin
             else
                 -- outside of any allowable address range - generate an error
                 assert (false)
-                    report  "Attempt to write to a non-existant address"
                     severity  ERROR;
             end if;
 
             -- wait for the update to happen
             wait for 0 ns;
-
-            report "finished writing:";
-            report "\tMemDB = " & to_hstring(MemDB);
-            report "\tRamBits0 = " & to_hstring(RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4)));
 
         end if;
 

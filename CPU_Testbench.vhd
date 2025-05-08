@@ -3,13 +3,14 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.std_logic_textio.all;
 use std.textio.all;
+use std.env.all;
 
 entity CPU_Testbench is
 end CPU_Testbench;
 
 architecture behavior of CPU_Testbench is
 
-    constant memBlockWordSize : integer := 4;
+    constant memBlockWordSize : integer := 8;
     constant regLen : integer := 32;
 
     component CPUtoplevel
@@ -91,6 +92,8 @@ begin
         RE2 <= '1';
         RE3 <= '1';
 
+        -------------------------------------------------------------------- CLOCK 1
+
         report "writing";
         report "SH2AddressBus = " & to_hstring(SH2AddressBus);
 
@@ -98,7 +101,7 @@ begin
         WE1 <= '0';
         WE2 <= '0';
         WE3 <= '0';
-        wait for 200 ns;
+        wait for 10 ns;
 
         SH2DataBus <= (others => 'Z');
 
@@ -110,26 +113,41 @@ begin
         WE2 <= '1';
         WE3 <= '1';
 
-        wait for 20 ns;
+        wait for 10 ns;
+
+        -------------------------------------------------------------------- CLOCK 2
+
+        WE0 <= '0';
+        WE1 <= '0';
+        WE2 <= '0';
+        WE3 <= '0';
+        wait for 10 ns;
+
+        WE0 <= '1';
+        WE1 <= '1';
+        WE2 <= '1';
+        WE3 <= '1';
+        
+        -------------------------------------------------------------------- DONE
 
         -- Read all memory contents
         write(L, string'("Memory Dump by Block (32 words each):")); 
         writeline(mem_dump, L);
 
-        for i in 0 to 1 loop        -- Loop over memory blocks
+        for i in 0 to 3 loop        -- Loop over memory blocks
 
             write(L, string'("===============================")); 
             writeline(mem_dump, L);
 
-            for j in 0 to 1 loop   -- Looping over addresses in memory blocks
+            for j in 0 to memBlockWordSize-1 loop   -- Looping over addresses in memory blocks
 
                 -- Read bytes individually
                 SH2AddressBus <= std_logic_vector(to_unsigned((i * memBlockWordSize) + j, 32)); 
                 wait for 1 ns;
-                RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; wait for 20 ns;
+                RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; wait for 10 ns;
 
                 write(L, string'("Addr "));
-                write(L, i, right, 3);
+                write(L, i * memBlockWordSize + j, right, 3);
                 write(L, string'(": "));
                 write(L, SH2DataBus);
                 writeline(mem_dump, L);
@@ -140,7 +158,7 @@ begin
 
         file_close(mem_dump);
 
-        wait;
+        stop;
 
     end process;
 
