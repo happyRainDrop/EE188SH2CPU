@@ -21,6 +21,7 @@
 --                                  Missing "end if"
 --      8 May 25  Ruth Berkun       Just rewrote write logic to not use intermediate signal MemData
 --                                  Finally, we can write on just one clock 
+--      8 May 25  Nerissa Finnen    Remove /4 on the START_ADDRESSES
 ----------------------------------------------------------------------------
 
 
@@ -122,19 +123,24 @@ begin
 
         -- first check if reading
         if  (RE = '0')  then
+            report " read "& to_hstring(MemAB);
             -- reading, put the data out (check the address)
             if  ((to_integer(unsigned(MemAB)) >= START_ADDR0) and
                  (to_integer(unsigned(MemAB - START_ADDR0)) < (MEMSIZE)))  then
-                MemDB <= RAMbits0(to_integer(unsigned(MemAB(31 downto 2) - START_ADDR0 / 4)));
+                MemDB <= RAMbits0(to_integer(unsigned(MemAB(31 downto 0) - START_ADDR0 )));
+                report "   here0";
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR1) and
                     (to_integer(unsigned(MemAB - START_ADDR1)) < (MEMSIZE)))  then
-                MemDB <= RAMbits1(to_integer(unsigned(MemAB(31 downto 2) - START_ADDR1 / 4)));
+                MemDB <= RAMbits1(to_integer(unsigned(MemAB(31 downto 0) - START_ADDR1 )));
+                report "   here1";
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR2) and
                  (to_integer(unsigned(MemAB - START_ADDR2)) < (MEMSIZE)))  then
-                MemDB <= RAMbits2(to_integer(unsigned(MemAB(31 downto 2) - START_ADDR2 / 4)));
+                MemDB <= RAMbits2(to_integer(unsigned(MemAB(31 downto 0) - START_ADDR2 )));
+                report "    here2";
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR3) and
                  (to_integer(unsigned(MemAB - START_ADDR3)) < (MEMSIZE)))  then
-                MemDB <= RAMbits3(to_integer(unsigned(MemAB(31 downto 2) - START_ADDR3 / 4)));
+                MemDB <= RAMbits3(to_integer(unsigned(MemAB(31 downto 0) - START_ADDR3 )));
+                report "    here3";
             else
                 -- outside of any allowable address range - set output to X
                 MemDB <= (others => 'X');
@@ -169,16 +175,16 @@ begin
                 
                     -- Choose which byte(s) of RAMbits0 to set to the corresponding bytes of MemDB
                 if WE0 = '0' then
-                    RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4))(7 downto 0) <= MemDB(7 downto 0);
+                    RAMbits0(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR0 ))(7 downto 0) <= MemDB(7 downto 0);
                 end if;
                 if WE1 = '0' then 
-                    RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4))(15 downto 8) <= MemDB(15 downto 8);
+                    RAMbits0(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR0 ))(15 downto 8) <= MemDB(15 downto 8);
                 end if;
                 if WE2 = '0' then
-                    RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4))(23 downto 16) <= MemDB(23 downto 16);
+                    RAMbits0(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR0 ))(23 downto 16) <= MemDB(23 downto 16);
                 end if;
                 if WE3 = '0' then 
-                    RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4))(31 downto 24) <= MemDB(31 downto 24);
+                    RAMbits0(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR0 ))(31 downto 24) <= MemDB(31 downto 24);
                 end if;
 
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR1) and
@@ -186,16 +192,16 @@ begin
 
                     -- Choose which byte(s) of RAMbits1 to set to the corresponding bytes of MemDB
                 if WE0 = '0' then
-                    RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4))(7 downto 0) <= MemDB(7 downto 0);
+                    RAMbits1(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR1 ))(7 downto 0) <= MemDB(7 downto 0);
                 end if;
                 if WE1 = '0' then 
-                    RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4))(15 downto 8) <= MemDB(15 downto 8);
+                    RAMbits1(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR1 ))(15 downto 8) <= MemDB(15 downto 8);
                 end if;
                 if WE2 = '0' then
-                    RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4))(23 downto 16) <= MemDB(23 downto 16);
+                    RAMbits1(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR1 ))(23 downto 16) <= MemDB(23 downto 16);
                 end if;
                 if WE3 = '0' then 
-                    RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4))(31 downto 24) <= MemDB(31 downto 24);
+                    RAMbits1(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR1 ))(31 downto 24) <= MemDB(31 downto 24);
                 end if;
 
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR2) and
@@ -203,16 +209,16 @@ begin
 
                 -- Choose which byte(s) of RAMbits2 to set to the corresponding bytes of MemDB
                 if WE0 = '0' then
-                    RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4))(7 downto 0) <= MemDB(7 downto 0);
+                    RAMbits2(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR2 ))(7 downto 0) <= MemDB(7 downto 0);
                 end if;
                 if WE1 = '0' then 
-                    RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4))(15 downto 8) <= MemDB(15 downto 8);
+                    RAMbits2(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR2 ))(15 downto 8) <= MemDB(15 downto 8);
                 end if;
                 if WE2 = '0' then
-                    RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4))(23 downto 16) <= MemDB(23 downto 16);
+                    RAMbits2(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR2 ))(23 downto 16) <= MemDB(23 downto 16);
                 end if;
                 if WE3 = '0' then 
-                    RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4))(31 downto 24) <= MemDB(31 downto 24);
+                    RAMbits2(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR2 ))(31 downto 24) <= MemDB(31 downto 24);
                 end if;
 
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR3) and
@@ -220,16 +226,16 @@ begin
 
                 -- Choose which byte(s) of RAMbits3 to set to the corresponding bytes of MemDB
                 if WE0 = '0' then
-                    RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4))(7 downto 0) <= MemDB(7 downto 0);
+                    RAMbits3(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR3 ))(7 downto 0) <= MemDB(7 downto 0);
                 end if;
                 if WE1 = '0' then 
-                    RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4))(15 downto 8) <= MemDB(15 downto 8);
+                    RAMbits3(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR3 ))(15 downto 8) <= MemDB(15 downto 8);
                 end if;
                 if WE2 = '0' then
-                    RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4))(23 downto 16) <= MemDB(23 downto 16);
+                    RAMbits3(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR3 ))(23 downto 16) <= MemDB(23 downto 16);
                 end if;
                 if WE3 = '0' then 
-                    RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4))(31 downto 24) <= MemDB(31 downto 24);
+                    RAMbits3(to_integer(unsigned(MemAB(31 downto 0)) - START_ADDR3 ))(31 downto 24) <= MemDB(31 downto 24);
                 end if;
 
             else

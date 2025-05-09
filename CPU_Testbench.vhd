@@ -135,13 +135,16 @@ begin
 
                 -- Read bytes individually
                 SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
-                RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; wait for 10 ns;
+                RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; 
+                wait for 10 ns;
 
                 write(L, string'("Addr "));
                 write(L, i);
                 write(L, string'(", "));
                 write(L, j);
-                write(L, string'(": "));
+                write(L, string'(" at "));
+                write(L, SH2AddressBus);
+                write(L, string'(" index "));
                 write(L, i * memBlockWordSize + j, right, 3);
                 write(L, string'(": "));
                 write(L, SH2DataBus);
