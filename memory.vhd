@@ -124,9 +124,6 @@ begin
         -- first check if reading
         if  (RE = '0')  then
 
-            report "  databus: " & to_hstring(MemDB);
-
-
             -- reading, put the data out (check the address)
             if  ((to_integer(unsigned(MemAB)) >= START_ADDR0) and
                  (to_integer(unsigned(MemAB - START_ADDR0)) < (MEMSIZE)))  then

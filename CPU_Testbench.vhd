@@ -108,6 +108,7 @@ begin
                 WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0'; 
 
                 wait until rising_edge(SH2clock);
+                SH2DataBus <= (others => 'Z');
                 WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';
             end loop;
         end loop;
