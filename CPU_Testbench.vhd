@@ -77,6 +77,7 @@ begin
         variable L : line;
     begin
 
+        ------------------------------------------------------------------- START
         -- Reset (active low)
         Reset <= '0';
         wait for 20 ns;
@@ -94,33 +95,24 @@ begin
         RE2 <= '1';
         RE3 <= '1';
 
-        -------------------------------------------------------------------- CLOCK 1
+        -------------------------------------------------------------------- WRITING
 
-        -- Write FF FF FF FF to address 0
-        SH2AddressBus <= x"00000000";
-        SH2DataBus    <= x"01010101";
-        report "writing";
-        report "SH2AddressBus = " & to_hstring(SH2AddressBus);
+        for i in 0 to 3 loop        -- Loop over memory blocks
 
-        WE0 <= '0';
-        WE1 <= '0';
-        WE2 <= '0';
-        WE3 <= '0';
-        wait for 10 ns;
+            for j in 0 to memBlockWordSize-1 loop   -- Looping over addresses in memory blocks
 
-        SH2DataBus <= (others => 'Z');
+                -- Read bytes individually
+                wait until rising_edge(SH2clock);
+                SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
+                SH2DataBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
+                WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0'; 
 
-        report "done writing";
-        report "SH2AddressBus = " & to_hstring(SH2AddressBus);
-        -- Turn off write
-        WE0 <= '1';
-        WE1 <= '1';
-        WE2 <= '1';
-        WE3 <= '1';
+                wait until rising_edge(SH2clock);
+                WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';
+            end loop;
+        end loop;
 
-        wait for 10 ns;
-
-        -------------------------------------------------------------------- DONE
+        -------------------------------------------------------------------- READING
 
         -- Read all memory contents
         write(L, string'("Memory Dump by Block (32 words each):")); 
@@ -133,10 +125,12 @@ begin
 
             for j in 0 to memBlockWordSize-1 loop   -- Looping over addresses in memory blocks
 
-                -- Read bytes individually
+                wait until rising_edge(SH2clock);
                 SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
                 RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; 
-                wait for 10 ns;
+
+                wait until rising_edge(SH2clock);
+                RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1';
 
                 write(L, string'("Addr "));
                 write(L, i);
@@ -150,7 +144,6 @@ begin
                 write(L, SH2DataBus);
                 writeline(mem_dump, L);
 
-                RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; wait for 10 ns;
             end loop;
         end loop;
 

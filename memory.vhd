@@ -123,24 +123,23 @@ begin
 
         -- first check if reading
         if  (RE = '0')  then
-            report " read "& to_hstring(MemAB);
+
+            report "  databus: " & to_hstring(MemDB);
+
+
             -- reading, put the data out (check the address)
             if  ((to_integer(unsigned(MemAB)) >= START_ADDR0) and
                  (to_integer(unsigned(MemAB - START_ADDR0)) < (MEMSIZE)))  then
                 MemDB <= RAMbits0(to_integer(unsigned(MemAB(31 downto 0) - START_ADDR0 )));
-                report "   here0";
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR1) and
                     (to_integer(unsigned(MemAB - START_ADDR1)) < (MEMSIZE)))  then
                 MemDB <= RAMbits1(to_integer(unsigned(MemAB(31 downto 0) - START_ADDR1 )));
-                report "   here1";
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR2) and
                  (to_integer(unsigned(MemAB - START_ADDR2)) < (MEMSIZE)))  then
                 MemDB <= RAMbits2(to_integer(unsigned(MemAB(31 downto 0) - START_ADDR2 )));
-                report "    here2";
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR3) and
                  (to_integer(unsigned(MemAB - START_ADDR3)) < (MEMSIZE)))  then
                 MemDB <= RAMbits3(to_integer(unsigned(MemAB(31 downto 0) - START_ADDR3 )));
-                report "    here3";
             else
                 -- outside of any allowable address range - set output to X
                 MemDB <= (others => 'X');
