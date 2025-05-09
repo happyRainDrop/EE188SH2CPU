@@ -82,11 +82,13 @@ begin
         wait for 20 ns;
         Reset <= '1';
 
-        -- Write FF FF FF FF to address 0
-        SH2AddressBus <= x"00000000";
-        SH2DataBus    <= x"01010101";
+        -- Start with: read off
+        RE0 <= '1';
+        RE1 <= '1';
+        RE2 <= '1';
+        RE3 <= '1';
 
-        -- Turn off read
+        -- Start with: write off
         RE0 <= '1';
         RE1 <= '1';
         RE2 <= '1';
@@ -94,6 +96,9 @@ begin
 
         -------------------------------------------------------------------- CLOCK 1
 
+        -- Write FF FF FF FF to address 0
+        SH2AddressBus <= x"00000000";
+        SH2DataBus    <= x"01010101";
         report "writing";
         report "SH2AddressBus = " & to_hstring(SH2AddressBus);
 
@@ -115,19 +120,6 @@ begin
 
         wait for 10 ns;
 
-        -------------------------------------------------------------------- CLOCK 2
-
-        WE0 <= '0';
-        WE1 <= '0';
-        WE2 <= '0';
-        WE3 <= '0';
-        wait for 10 ns;
-
-        WE0 <= '1';
-        WE1 <= '1';
-        WE2 <= '1';
-        WE3 <= '1';
-
         -------------------------------------------------------------------- DONE
 
         -- Read all memory contents
@@ -143,7 +135,6 @@ begin
 
                 -- Read bytes individually
                 SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
-                wait for 1 ns;
                 RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; wait for 10 ns;
 
                 write(L, string'("Addr "));

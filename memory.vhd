@@ -19,6 +19,8 @@
 --                                  Replaced CONV_INTEGER with to_integer
 --      8 May 25  Ruth Berkun       GLENNNNNN WHYYYYYYYYY: Mismatched "end if"
 --                                  Missing "end if"
+--      8 May 25  Ruth Berkun       Just rewrote write logic to not use intermediate signal MemData
+--                                  Finally, we can write on just one clock 
 ----------------------------------------------------------------------------
 
 
@@ -103,9 +105,6 @@ architecture  behavioral  of  MEMORY32x32  is
     signal  RE  :  std_logic;
     signal  WE  :  std_logic;
 
-    -- data read from memory
-    signal  MemData  :  std_logic_vector(31 downto 0);
-
 
 begin
 
@@ -120,7 +119,6 @@ begin
 
         -- wait for an input to change
         wait on  RE, RE0, RE1, RE2, RE3, WE, WE0, WE1, WE2, WE3, MemAB;
-
 
         -- first check if reading
         if  (RE = '0')  then
@@ -156,17 +154,6 @@ begin
                 MemDB(31 downto 24) <= (others => 'Z');
             end if;
 
-            for j in 0 to MEMSIZE-1 loop   -- Looping over addresses in memory blocks
-
-                report "  READING ram0:" & to_hstring(RAMbits0(j));
-                report "  READING ram1:" & to_hstring(RAMbits1(j));
-                report "  READING ram2:" & to_hstring(RAMbits2(j));
-                report "  READING ram3:" & to_hstring(RAMbits3(j));
-                report "===============================";
-            
-            end loop;
-            report "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
-
         else
 
             -- not reading, send data bus to hi-Z
@@ -177,53 +164,74 @@ begin
         if  (WE'event and (WE = '0'))  then
 
             -- rising edge of write - write the data (check which address range)
-            -- first get current value of the byte
             if  ((to_integer(unsigned(MemAB)) >= START_ADDR0) and
                  (to_integer(unsigned(MemAB - START_ADDR0)) < (MEMSIZE)))  then
-                MemData <= RAMbits0(to_integer(unsigned(MemAB(31 downto 2) - START_ADDR0 / 4)));
+                
+                    -- Choose which byte(s) of RAMbits0 to set to the corresponding bytes of MemDB
+                if WE0 = '0' then
+                    RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4))(7 downto 0) <= MemDB(7 downto 0);
+                end if;
+                if WE1 = '0' then 
+                    RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4))(15 downto 8) <= MemDB(15 downto 8);
+                end if;
+                if WE2 = '0' then
+                    RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4))(23 downto 16) <= MemDB(23 downto 16);
+                end if;
+                if WE3 = '0' then 
+                    RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4))(31 downto 24) <= MemDB(31 downto 24);
+                end if;
+
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR1) and
                     (to_integer(unsigned(MemAB - START_ADDR1)) < (MEMSIZE)))  then
-                MemData <= RAMbits1(to_integer(unsigned(MemAB(31 downto 2) - START_ADDR1 / 4)));
+
+                    -- Choose which byte(s) of RAMbits1 to set to the corresponding bytes of MemDB
+                if WE0 = '0' then
+                    RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4))(7 downto 0) <= MemDB(7 downto 0);
+                end if;
+                if WE1 = '0' then 
+                    RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4))(15 downto 8) <= MemDB(15 downto 8);
+                end if;
+                if WE2 = '0' then
+                    RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4))(23 downto 16) <= MemDB(23 downto 16);
+                end if;
+                if WE3 = '0' then 
+                    RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4))(31 downto 24) <= MemDB(31 downto 24);
+                end if;
+
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR2) and
                     (to_integer(unsigned(MemAB - START_ADDR2)) < (MEMSIZE)))  then
-                MemData <= RAMbits2(to_integer(unsigned(MemAB(31 downto 2) - START_ADDR2 / 4)));
+
+                -- Choose which byte(s) of RAMbits2 to set to the corresponding bytes of MemDB
+                if WE0 = '0' then
+                    RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4))(7 downto 0) <= MemDB(7 downto 0);
+                end if;
+                if WE1 = '0' then 
+                    RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4))(15 downto 8) <= MemDB(15 downto 8);
+                end if;
+                if WE2 = '0' then
+                    RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4))(23 downto 16) <= MemDB(23 downto 16);
+                end if;
+                if WE3 = '0' then 
+                    RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4))(31 downto 24) <= MemDB(31 downto 24);
+                end if;
+
             elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR3) and
                     (to_integer(unsigned(MemAB - START_ADDR3)) < (MEMSIZE)))  then
-                MemData <= RAMbits3(to_integer(unsigned(MemAB(31 downto 2) - START_ADDR3 / 4)));
-            else
-                MemData <= (others => 'X');
-            end if;
 
-            -- now update the data based on the write enable signals
-            -- set any byte being written to its new value
-            if  WE0 = '0'  then
-                MemData(7 downto 0) <= MemDB(7 downto 0);
-            end if;
-            if  WE1 = '0'  then
-                MemData(15 downto 8) <= MemDB(15 downto 8);
-            end if;
-            if  WE2 = '0'  then
-                MemData(23 downto 16) <= MemDB(23 downto 16);
-            end if;
-            if  WE3 = '0'  then
-                MemData(31 downto 24) <= MemDB(31 downto 24);
-            end if;
+                -- Choose which byte(s) of RAMbits3 to set to the corresponding bytes of MemDB
+                if WE0 = '0' then
+                    RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4))(7 downto 0) <= MemDB(7 downto 0);
+                end if;
+                if WE1 = '0' then 
+                    RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4))(15 downto 8) <= MemDB(15 downto 8);
+                end if;
+                if WE2 = '0' then
+                    RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4))(23 downto 16) <= MemDB(23 downto 16);
+                end if;
+                if WE3 = '0' then 
+                    RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4))(31 downto 24) <= MemDB(31 downto 24);
+                end if;
 
-            report "\tMemData = " & to_hstring(MemData);
-
-            -- finally write the updated value to memory
-            if  ((to_integer(unsigned(MemAB)) >= START_ADDR0) and
-                 (to_integer(unsigned(MemAB - START_ADDR0)) < (MEMSIZE)))  then
-                RAMbits0(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR0 / 4)) <= MemData;
-            elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR1) and
-                    (to_integer(unsigned(MemAB - START_ADDR1)) < (MEMSIZE)))  then
-                RAMbits1(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR1 / 4)) <= MemData;
-            elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR2) and
-                    (to_integer(unsigned(MemAB - START_ADDR2)) < (MEMSIZE)))  then
-                RAMbits2(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR2 / 4)) <= MemData;
-            elsif  ((to_integer(unsigned(MemAB)) >= START_ADDR3) and
-                    (to_integer(unsigned(MemAB - START_ADDR3)) < (MEMSIZE)))  then
-                RAMbits3(to_integer(unsigned(MemAB(31 downto 2)) - START_ADDR3 / 4)) <= MemData;
             else
                 -- outside of any allowable address range - generate an error
                 assert (false)
@@ -232,17 +240,6 @@ begin
 
             -- wait for the update to happen
             wait for 0 ns;
-
-            for j in 0 to MEMSIZE-1 loop   -- Looping over addresses in memory blocks
-
-                report "  WRITING ram0:" & to_hstring(RAMbits0(j));
-                report "  WRITING ram1:" & to_hstring(RAMbits1(j));
-                report "  WRITING ram2:" & to_hstring(RAMbits2(j));
-                report "  WRITING ram3:" & to_hstring(RAMbits3(j));
-                report "===============================";
-            
-            end loop;
-            report "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
 
         end if;
 
