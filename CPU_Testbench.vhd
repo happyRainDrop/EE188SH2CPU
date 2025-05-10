@@ -102,7 +102,7 @@ begin
             for j in 0 to memBlockWordSize-1 loop   -- Looping over addresses in memory blocks
 
                 -- Read bytes individually
-                wait until rising_edge(SH2clock);
+                wait until falling_edge(SH2clock);
                 SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
                 SH2DataBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
                 WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0'; 
@@ -126,7 +126,7 @@ begin
 
             for j in 0 to memBlockWordSize-1 loop   -- Looping over addresses in memory blocks
 
-                wait until rising_edge(SH2clock);
+                wait until falling_edge(SH2clock);
                 SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
                 RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; 
 
