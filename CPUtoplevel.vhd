@@ -131,6 +131,30 @@ package SH2_IR_Constants is
     constant LDS_L_Rm_PR : std_logic_vector(15 downto 0) := "0100XXXX00100110";
     --constant MAC_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000XXXXXXXX1111";
     --constant MAC_W_Rm_Rn : std_logic_vector(15 downto 0) := "0100XXXXXXXX1111";
+    constant MOV_IMM_TO_Rn        : std_logic_vector(15 downto 0) := "1110XXXXXXXXXXXX"; -- MOV #imm, Rn
+    constant MOV_W_PC_DISP_TO_Rn  : std_logic_vector(15 downto 0) := "1001XXXXXXXXXXXX"; -- MOV.W @(disp,PC), Rn
+    constant MOV_L_PC_DISP_TO_Rn  : std_logic_vector(15 downto 0) := "1101XXXXXXXXXXXX"; -- MOV.L @(disp,PC), Rn
+    constant MOV_Rm_TO_Rn         : std_logic_vector(15 downto 0) := "0110XXXXXXXX0011"; -- MOV Rm, Rn
+    constant MOVB_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010XXXXXXXX0000"; -- MOV.B Rm, @Rn
+    constant MOVW_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010XXXXXXXX0001"; -- MOV.W Rm, @Rn
+    constant MOVL_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010XXXXXXXX0010"; -- MOV.L Rm, @Rn
+    constant MOVB_atRm_TO_Rn      : std_logic_vector(15 downto 0) := "0110XXXXXXXX0000"; -- MOV.B @Rm, Rn
+    constant MOVW_atRm_TO_Rn      : std_logic_vector(15 downto 0) := "0110XXXXXXXX0001"; -- MOV.W @Rm, Rn
+    constant MOVL_atRm_TO_Rn      : std_logic_vector(15 downto 0) := "0110XXXXXXXX0010"; -- MOV.L @Rm, Rn
+    constant MOVB_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010XXXXXXXX0100"; -- MOV.B Rm, @–Rn
+    constant MOVW_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010XXXXXXXX0101"; -- MOV.W Rm, @–Rn
+    constant MOVL_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010XXXXXXXX0110"; -- MOV.L Rm, @–Rn
+    constant MOVB_atPostIncRm_TO_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX0100"; -- MOV.B @Rm+, Rn
+    constant MOVW_atPostIncRm_TO_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX0101"; -- MOV.W @Rm+, Rn
+    constant MOVL_atPostIncRm_TO_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX0110"; -- MOV.L @Rm+, Rn
+    constant MOVB_R0_TO_atDispRn  : std_logic_vector(15 downto 0) := "10000000XXXXXXXX"; -- MOV.B R0, @(disp,Rn)
+    constant MOVW_R0_TO_atDispRn  : std_logic_vector(15 downto 0) := "10000001XXXXXXXX"; -- MOV.W R0, @(disp,Rn)
+    constant MOVL_Rm_TO_atDispRn  : std_logic_vector(15 downto 0) := "0001XXXXXXXXXXXX"; -- MOV.L Rm, @(disp,Rn)
+    constant MOVB_atDispRm_TO_R0  : std_logic_vector(15 downto 0) := "10000100XXXXXXXX"; -- MOV.B @(disp,Rm), R0
+    constant MOVW_atDispRm_TO_R0  : std_logic_vector(15 downto 0) := "10000101XXXXXXXX"; -- MOV.W @(disp,Rm), R0
+    constant MOVL_atDispRm_TO_Rn  : std_logic_vector(15 downto 0) := "0101XXXXXXXXXXXX"; -- MOV.L @(disp,Rm), Rn
+    constant MOVB_Rm_TO_atR0Rn    : std_logic_vector(15 downto 0) := "0000XXXXXXXX0100"; -- MOV.B Rm, @(R0,Rn)
+    constant MOVW_Rm_TO_atR0Rn    : std_logic_vector(15 downto 0) := "0000XXXXXXXX0101"; -- MOV.W Rm, @(R0,Rn)  
     constant MOV_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000XXXXXXXX0110";
     constant MOV_B_GBR_R0 : std_logic_vector(15 downto 0) := "11000000XXXXXXXX";
     constant MOV_W_GBR_R0 : std_logic_vector(15 downto 0) := "11000001XXXXXXXX";
@@ -294,12 +318,19 @@ architecture Structural of CPUtoplevel is
     -- CONTROL OUTPUTS
     signal SH2SelDataBus    : integer range NUM_DATA_BUS_OPTIONS downto 0 := HOLD_DATA_BUS;     -- do not update, update with reg output, or update with ALU output
     signal SH2SelAddressBus : integer range NUM_ADDRESS_BUS_OPTIONS downto 0 := HOLD_ADDRESS_BUS;  -- do not update, update with PMAU address out, or update with DMAU address out
-
+    ------------------------------------------------------------------------------------------
     -- Outputs of registers; get hooked up to ALU and PMAU and DMAU
     signal RegArrayOutA  : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     signal RegArrayOutB  : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     signal RegArrayOutA1 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    ------------------------------------------------------------------------------------------
+    -- CPU top level signals; finite state machine and IR
+    type states is (ZERO_CLK, FETCH_IR, END_OF_FILE); 
+    --TWO_CLK_W, TWO_CLK_R, THREE_CLK_R, THREE_CLK_W);
+    signal CurrentState     : states;
+    variable NextState      : states;
+    signal InstructionReg   : std_logic_vector(15 downto 0);
 
 
 begin
@@ -395,6 +426,118 @@ begin
             SH2ProgramAddressBus => RegArrayOutA,        --make the PC come out into here
             SH2ProgramAddressSrc => SH2ProgramAddressSrc
         );    
+    
+    process(SH2clock)
+    begin
+        --On the rising edge of the CurrentState
+        --Perform state-specific tasks
+            --ZERO_CLK
+                --Stop the PC
+                --Fetch the instruction
+            --FETCH_IR
+                --Update the PC
+                --Get next instruction while executing current instruction
+            --END_OF_FILE
+                --Stop all SH-2 CPU Units
+        if rising_edge(SH2clock) then
+            case CurrentState is 
+                when ZERO_CLK
+                    --PC holds
+                    --Get instructions
+                when FETCH_IR
+                    --PC increments
+                    --Get Instruction
+                when END_OF_FILE
+                    --PC holds
+                    --NOP hold
+            end case;
+        --On the falling edge of the CurrentState
+        --Update Read and Write for correct RAM interaction based on state
+            --ZERO_CLK
+                --Stop the PC
+                --Fetch the instruction
+            --FETCH_IR
+                --Update the PC
+                --Get next instruction while executing current instruction
+            --END_OF_FILE
+                --Stop all SH-2 CPU Units
+        elsif fallling_edge(SH2clock) then
+            case CurrentState is 
+                when ZERO_CLK
+                    --Read enabled for fetching first instruction
+                    RE0 <= 0;
+                    RE1 <= 0;
+                    RE2 <= 0;
+                    RE3 <= 0;
 
+                    --Write disabled, busy fetching instruction
+                    WE0 <= 1;
+                    WE1 <= 1;
+                    WE2 <= 1;
+                    WE3 <= 1;
+                when FETCH_IR
+                    --Read enabled for fetching next instruction
+                    RE0 <= 0;
+                    RE1 <= 0;
+                    RE2 <= 0;
+                    RE3 <= 0;
 
+                    --Write disabled, busy fetching next instruction
+                    WE0 <= 1;
+                    WE1 <= 1;
+                    WE2 <= 1;
+                    WE3 <= 1;
+                when END_OF_FILE
+                    --Read enabled for RAM dumping
+                    RE0 <= 0;
+                    RE1 <= 0;
+                    RE2 <= 0;
+                    RE3 <= 0;
+
+                    --Write remains disabled for RAM dumping
+                    WE0 <= 1;
+                    WE1 <= 1;
+                    WE2 <= 1;
+                    WE3 <= 1;            
+                end case;
+            end if;
+    end process;
+
+    --Update the CurrentState to the NextState every rising edge of the clock
+    --Set Read and Write to inactive as they enable during the falling edge of the clock
+    process(SH2clock)
+    begin
+        if rising_edge(SH2clock) then 
+            CurrentState <= NextState;
+
+            RE0 <= 1;
+            RE1 <= 1;
+            RE2 <= 1;
+            RE3 <= 1;
+
+            WE0 <= 1;
+            WE1 <= 1;
+            WE2 <= 1;
+            WE3 <= 1;
+        end if;
+    end process;
+
+--combinational if statements
+--Matches the 
+-- at the end of the matches -> update the currentstate with nextState variable
+    if std_match(CurrentState, END_OF_FILE) then 
+        --Do NOP CS
+        --NextState is end of file
+        if std_match(ADD_imm_Rn, InstructionReg) then
+
+            elsif std_match(ROTL_Rn, InstructionReg) then
+            
+            elsif std_match(AND_Rm_Rn, InstructionReg) then
+        
+            elsif std_match(LDC_Rm_SR, InstructionReg) then
+        
+            elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
+            
+            end if;
+    end if;
 end Structural;
