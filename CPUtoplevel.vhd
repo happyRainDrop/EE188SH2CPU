@@ -23,7 +23,9 @@
 --      7 May 35  Ruth Berkun       Restructure to have ctrl signals to say what updates 
 --                                  SH2DataBus and SH2AddressBus buses
 --      7 May 25  Ruth Berkun       Instantiate external memory
---      9 May 25  Nerissa Finnen    Updated IR constants, adding read-in file functionality, Finite State Boi
+--      7 May 25  Nerissa Finnen    Started read-in file functionality
+--      9 May 25  Nerissa Finnen    Updated IR constants. Started finite state machine functionality
+--                                  and control signal settings.                              
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -438,63 +440,54 @@ begin
                 --Update the PC
                 --Get next instruction while executing current instruction
             --END_OF_FILE
-                --Stop all SH-2 CPU Units
+                --Stop the PC
         if rising_edge(SH2clock) then
             case CurrentState is 
                 when ZERO_CLK
-                    --PC holds
-                    --Get instructions
+
                 when FETCH_IR
-                    --PC increments
-                    --Get Instruction
+                
                 when END_OF_FILE
-                    --PC holds
-                    --NOP hold
             end case;
         --On the falling edge of the CurrentState
         --Update Read and Write for correct RAM interaction based on state
             --ZERO_CLK
-                --Stop the PC
-                --Fetch the instruction
+                --Read enabled for fetching first instruction
+                --Write disabled, busy fetching instruction
             --FETCH_IR
-                --Update the PC
-                --Get next instruction while executing current instruction
+                --Read enabled for fetching next instruction
+                --Write disabled, busy fetching next instruction
             --END_OF_FILE
-                --Stop all SH-2 CPU Units
+                --Read enabled for RAM dumping
+                --Write remains disabled for RAM dumping
         elsif fallling_edge(SH2clock) then
             case CurrentState is 
                 when ZERO_CLK
-                    --Read enabled for fetching first instruction
                     RE0 <= 0;
                     RE1 <= 0;
                     RE2 <= 0;
                     RE3 <= 0;
 
-                    --Write disabled, busy fetching instruction
                     WE0 <= 1;
                     WE1 <= 1;
                     WE2 <= 1;
                     WE3 <= 1;
                 when FETCH_IR
-                    --Read enabled for fetching next instruction
                     RE0 <= 0;
                     RE1 <= 0;
                     RE2 <= 0;
                     RE3 <= 0;
 
-                    --Write disabled, busy fetching next instruction
                     WE0 <= 1;
                     WE1 <= 1;
                     WE2 <= 1;
                     WE3 <= 1;
                 when END_OF_FILE
-                    --Read enabled for RAM dumping
                     RE0 <= 0;
                     RE1 <= 0;
                     RE2 <= 0;
                     RE3 <= 0;
 
-                    --Write remains disabled for RAM dumping
                     WE0 <= 1;
                     WE1 <= 1;
                     WE2 <= 1;
@@ -504,7 +497,7 @@ begin
     end process;
 
     --Update the CurrentState to the NextState every rising edge of the clock
-    --Set Read and Write to inactive as they enable during the falling edge of the clock
+    --Set Read and Write to inactive during the rising edge of the clock
     process(SH2clock)
     begin
         if rising_edge(SH2clock) then 
@@ -524,7 +517,7 @@ begin
 
 --combinational if statements
 --Matches the 
--- at the end of the matches -> update the currentstate with nextState variable
+--at the end of the matches -> update the currentstate with nextState variable
     if std_match(CurrentState, END_OF_FILE) then 
         --Do NOP CS
         --NextState is end of file
