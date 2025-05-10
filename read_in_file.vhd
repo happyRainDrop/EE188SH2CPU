@@ -35,6 +35,12 @@ begin
             exit;
         end if;
 
+        -- Disable read (set back to inactive)
+        RE0 <= '1';
+        RE1 <= '1';
+        RE2 <= '1';
+        RE3 <= '1';
+
         -- Drive the address and data
         SH2AddressBus <= std_logic_vector(to_unsigned(START_ADDR0 + addr, 32));
         SH2DataBus <= hexval;

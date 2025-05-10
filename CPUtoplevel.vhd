@@ -76,152 +76,123 @@ end SH2_CPU_Constants;
 library ieee;
 use ieee.std_logic_1164.ALL;
 package SH2_IR_Constants is
-    --Decoded Constants
-    --Took the high byte and used it to decode
-    --Used the lower bytes to differentiate the commands
-
-    --PINK
-    constant LOGICAL_CMP_TWO_REG_XTRACT :   std_logic_vector(3 downto 0)    := "0010";
-    --sub-pink category codes
-    --check the lowest byte against these
-    constant AND_TWO_REG                :   std_logic_vector(3 downto 0)    := "1001";
-    constant OR_TWO_REG                 :   std_logic_vector(3 downto 0)    := "1011";
-    constant TST_TWO_REG                :   std_logic_vector(3 downto 0)    := "1000";
-    constant XOR_TWO_REG                :   std_logic_vector(3 downto 0)    := "1010";
-
-    constant XTRCT                      :   std_logic_vector(3 downto 0)    := "1101";
-
-    constant CMP_STR                    :   std_logic_vector(3 downto 0)    := "1100";
-
-    --BLUE
-    constant LOGICAL_IMM_MOV_DISP       :   std_logic_vector(3 downto 0)    := "1100";
-    --sub-blue category codes
-    --check these against the next highest byte after the highest one
-    constant AND_IMM                    :   std_logic_vector(3 downto 0)    := "1001";
-    constant AND_B                      :   std_logic_vector(3 downto 0)    := "1101";
-    constant OR_IMM                     :   std_logic_vector(3 downto 0)    := "1011";
-    constant OR_B                       :   std_logic_vector(3 downto 0)    := "1111";
-    constant TST_IMM                    :   std_logic_vector(3 downto 0)    := "1000";
-    constant TST_B                      :   std_logic_vector(3 downto 0)    := "1100";
-    constant XOR_IMM                    :   std_logic_vector(3 downto 0)    := "1010";
-    constant XOR_B                      :   std_logic_vector(3 downto 0)    := "1110";
-
-    constant MOV_B_R0                   :   std_logic_vector(3 downto 0)    := "0000";
-    constant MOV_W_R0                   :   std_logic_vector(3 downto 0)    := "0001";
-    constant MOV_L_R0                   :   std_logic_vector(3 downto 0)    := "0010";
-    constant MOV_B_GBR                  :   std_logic_vector(3 downto 0)    := "0100";
-    constant MOV_W_GBR                  :   std_logic_vector(3 downto 0)    := "0101";
-    constant MOV_L_GBR                  :   std_logic_vector(3 downto 0)    := "0110";
-    constant MOVA                       :   std_logic_vector(3 downto 0)    := "0111";
-
-
-    --PURPLE
-    constant SHIFT_JMP_JSR_LD_STC       :  std_logic_vector(3 downto 0)    := "0100";
-    --sub-purple category codes
-    --check these against the lowest bits
-    constant JMP                        :   std_logic_vector(7 downto 0)    := "00101011";
-    constant JSR                        :   std_logic_vector(7 downto 0)    := "00001011";
-
-    constant ROTL                       :   std_logic_vector(7 downto 0)    := "00000100";
-    constant ROTR                       :   std_logic_vector(7 downto 0)    := "00000101";
-    constant ROTCL                      :   std_logic_vector(7 downto 0)    := "00100100";
-    constant ROTCR                      :   std_logic_vector(7 downto 0)    := "00100101";
-    constant SHAL                       :   std_logic_vector(7 downto 0)    := "00100000";
-    constant SHAR                       :   std_logic_vector(7 downto 0)    := "00100001";
-    constant SHLL                       :   std_logic_vector(7 downto 0)    := "00000000";
-    constant SHLR                       :   std_logic_vector(7 downto 0)    := "00000001";
-
-    constant CMP_PL                     :   std_logic_vector(7 downto 0)    := "00010101";
-    constant CMP_PZ                     :   std_logic_vector(7 downto 0)    := "00010001";
-    constant DL                         :   std_logic_vector(7 downto 0)    := "00010000";
-
-    constant LDC_SR                     :   std_logic_vector(7 downto 0)    := "00001110";
-    constant LDC_GBR                    :   std_logic_vector(7 downto 0)    := "00011110";
-    constant LDC_VBR                    :   std_logic_vector(7 downto 0)    := "00101110";
-    constant LDC_L_SR                   :   std_logic_vector(7 downto 0)    := "00000111";
-    constant LDC_L_GBR                  :   std_logic_vector(7 downto 0)    := "00010111";
-    constant LDC_L_VBR                  :   std_logic_vector(7 downto 0)    := "00100111";
-    constant LDS_PR                     :   std_logic_vector(7 downto 0)    := "00100110";
-    constant LDS_L_PR                   :   std_logic_vector(7 downto 0)    := "00100110";
-    constant STC_L_SR                   :   std_logic_vector(7 downto 0)    := "00000011";
-    constant STC_L_GBR                  :   std_logic_vector(7 downto 0)    := "00010011";
-    constant STC_L_VBR                  :   std_logic_vector(7 downto 0)    := "00100010";
-    constant STS_L_PR                   :   std_logic_vector(7 downto 0)    := "00100011";
-
-    --PALE PINK    
-    constant NOT_SWAP_EXTU_EXTS_NEG     :   std_logic_vector(3 downto 0)    := "0110";
-    --sub-pale pink category codes
-    --check the lowest byte against these
-    constant NOT_CMD                    :   std_logic_vector(3 downto 0)    := "0111";
-
-    constant SWAP_B                     :   std_logic_vector(3 downto 0)    := "1000";
-    constant SWAP_W                     :   std_logic_vector(3 downto 0)    := "1001";
-
-    constant EXTU_B                     :   std_logic_vector(3 downto 0)    := "1100";
-    constant EXTU_W                     :   std_logic_vector(3 downto 0)    := "1101";
-    constant EXTS_B                     :   std_logic_vector(3 downto 0)    := "1110";
-    constant EXTS_W                     :   std_logic_vector(3 downto 0)    := "1111";
-    constant NEG                        :   std_logic_vector(3 downto 0)    := "1011";
-    constant NEG_CARRY                  :   std_logic_vector(3 downto 0)    := "1010";
-
-    --LIGHT GREEN
-    constant BF_BT_LABLE_CMP_EQ         :   std_logic_vector(3 downto 0)    := "1000";
-    --sub-light green category codes
-    --check the NEXT highest byte after the highest byte
-    constant BF_LABEL                   :   std_logic_vector(3 downto 0)    := "1011";
-    constant BF_S_LABEL                 :   std_logic_vector(3 downto 0)    := "1111";
-    constant BT_LABEL                   :   std_logic_vector(3 downto 0)    := "1001";
-    constant BT_S_LABEL                 :   std_logic_vector(3 downto 0)    := "1101";
-
-    constant CMP_EQ_R0                  :   std_logic_vector(3 downto 0)    := "1000";
-
-    --GREEN
-    constant BRAF_BRSF_MOV_REG_MOVT_STCS_RN :   std_logic_vector(3 downto 0)    := "0000";
-    --sub-green category codes
-    --check the lowest bits against these
-    constant BRAF                       :   std_logic_vector(7 downto 0)    := "00100011";
-    constant BSRF                       :   std_logic_vector(7 downto 0)    := "00000011";
-
-    constant MOV_L_RM                   :   std_logic_vector(3 downto 0)    := "0110";
-    constant MOV_B_RN                   :   std_logic_vector(3 downto 0)    := "1100";
-    constant MOV_W_RN                   :   std_logic_vector(3 downto 0)    := "1101";
-    constant MOV_L_RN                   :   std_logic_vector(3 downto 0)    := "1110";
-    constant MOVT_RN                    :   std_logic_vector(7 downto 0)    := "00101001";
-
-    constant STC_SR                     :   std_logic_vector(7 downto 0)    := "00000010";
-    constant STC_GBR                    :   std_logic_vector(7 downto 0)    := "00010010";
-    constant STC_VBR                    :   std_logic_vector(7 downto 0)    := "00100010";
-    constant STS_PR                     :   std_logic_vector(7 downto 0)    := "00101010";
-
-    --ORANGE
-    constant ADD_SUB_CMP_TWO_REG        :   std_logic_vector(3 downto 0)    := "0011";
-    --sub-orange category codes
-    --check the lowest byte against these
-    constant ADD_TWO_REG                :   std_logic_vector(3 downto 0)    := "1100";
-    constant ADD_CARRY_TWO_REG          :   std_logic_vector(3 downto 0)    := "1110";
-    constant ADD_OVERFLOW_TWO_REG       :   std_logic_vector(3 downto 0)    := "1111";
-
-    constant CMP_EQ_TWO_REG             :   std_logic_vector(3 downto 0)    := "0000";
-    constant CMP_HS_TWO_REG             :   std_logic_vector(3 downto 0)    := "0010";
-    constant CMP_GE_TWO_REG             :   std_logic_vector(3 downto 0)    := "0011";
-    constant CMP_HI_TWO_REG             :   std_logic_vector(3 downto 0)    := "0110";
-    constant CMP_GT_TWO_REG             :   std_logic_vector(3 downto 0)    := "0111";
-
-    constant SUB_TWO_REG                :   std_logic_vector(3 downto 0)    := "1000";
-    constant SUB_CARRY_TWO_REG          :   std_logic_vector(3 downto 0)    := "1010";
-    constant SUB_OVERFLOW_TWO_REG       :   std_logic_vector(3 downto 0)    := "1011";
-
-    --RED
-    constant CLRT                       :   std_logic_vector(3 downto 0)    := "1000";
-    constant TRAPA                      :   std_logic_vector(6 downto 0)    := "1100011";
-    constant NOP                        :   std_logic_vector(3 downto 0)    := "1001";
-    constant SETT                       :   std_logic_vector(4 downto 0)    := "11000";
-    constant SLEEP                      :   std_logic_vector(4 downto 0)    := "11011";
-    constant ADD_IMM                    :   std_logic_vector(3 downto 0)    := "0111";
-    constant BRA_LABEL                  :   std_logic_vector(3 downto 0)    := "1010";
-    --BSR has same opcode to check, but is a longer vector than RTS
-    constant BSR_LABEL                  :   std_logic_vector(3 downto 0)    := "1011";
-    constant RTS                        :   std_logic_vector(3 downto 0)    := "1011";
+    -- SH-2 Instruction Opcode Constants
+-- Register, immediate, and specified registers
+constant ADD_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1100";
+constant ADD_imm_Rn : std_logic_vector(15 downto 0) := "0111XXXXXXXXXXXX";
+constant ADDC_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1110";
+constant ADDV_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1111";
+constant AND_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX1001";
+constant AND_imm_R0 : std_logic_vector(15 downto 0) := "11001001XXXXXXXX";
+constant AND_B_imm_GBR : std_logic_vector(15 downto 0) := "11001101XXXXXXXX";
+constant BF_disp : std_logic_vector(15 downto 0) := "10001011XXXXXXXX";
+constant BF_S_disp : std_logic_vector(15 downto 0) := "10001111XXXXXXXX";
+constant BRA_disp : std_logic_vector(15 downto 0) := "1010XXXXXXXXXXXX";
+constant BRAF_Rm : std_logic_vector(15 downto 0) := "0000XXXX00100011";
+constant BSR_disp : std_logic_vector(15 downto 0) := "1011XXXXXXXXXXXX";
+constant BSRF_Rm : std_logic_vector(15 downto 0) := "0000XXXX00000011";
+constant BT_disp : std_logic_vector(15 downto 0) := "10001001XXXXXXXX";
+constant BT_S_disp : std_logic_vector(15 downto 0) := "10001101XXXXXXXX";
+--constant CLRMAC : std_logic_vector(15 downto 0) := "0000000000101000";
+constant CLRT : std_logic_vector(15 downto 0) := "0000000000001000";
+constant CMP_EQ_imm_R0 : std_logic_vector(15 downto 0) := "10001000XXXXXXXX";
+constant CMP_EQ_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX0000";
+constant CMP_GE_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX0011";
+constant CMP_GT_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX0111";
+constant CMP_HI_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX0110";
+constant CMP_HS_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX0010";
+constant CMP_PL_Rn : std_logic_vector(15 downto 0) := "0100XXXX00010101";
+constant CMP_PZ_Rn : std_logic_vector(15 downto 0) := "0100XXXX00010001";
+constant CMP_STR_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX1100";
+--constant DIV0S_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX0111";
+--constant DIV0U : std_logic_vector(15 downto 0) := "0000000000011001";
+--constant DIV1_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX0100";
+--constant DMULS_L_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1101";
+--constant DMULU_L_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX0101";
+constant DT_Rn : std_logic_vector(15 downto 0) := "0100XXXX00010000";
+constant EXTS_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX1110";
+constant EXTS_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX1111";
+constant EXTU_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX1100";
+constant EXTU_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX1101";
+constant JMP_Rm : std_logic_vector(15 downto 0) := "0100XXXX00101011";
+constant JSR_Rm : std_logic_vector(15 downto 0) := "0100XXXX00001011";
+constant LDC_Rm_SR : std_logic_vector(15 downto 0) := "0100XXXX00001110";
+constant LDC_Rm_GBR : std_logic_vector(15 downto 0) := "0100XXXX00011110";
+constant LDC_Rm_VBR : std_logic_vector(15 downto 0) := "0100XXXX00101110";
+constant LDC_L_Rm_SR : std_logic_vector(15 downto 0) := "0100XXXX00000111";
+constant LDC_L_Rm_GBR : std_logic_vector(15 downto 0) := "0100XXXX00010111";
+constant LDC_L_Rm_VBR : std_logic_vector(15 downto 0) := "0100XXXX00100111";
+--constant LDS_Rm_MACH : std_logic_vector(15 downto 0) := "0100XXXX00001010";
+--constant LDS_Rm_MACL : std_logic_vector(15 downto 0) := "0100XXXX00011010";
+constant LDS_Rm_PR : std_logic_vector(15 downto 0) := "0100XXXX00101010";
+--constant LDS_L_Rm_MACH : std_logic_vector(15 downto 0) := "0100XXXX00000110";
+--constant LDS_L_Rm_MACL : std_logic_vector(15 downto 0) := "0100XXXX00010110";
+constant LDS_L_Rm_PR : std_logic_vector(15 downto 0) := "0100XXXX00100110";
+--constant MAC_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000XXXXXXXX1111";
+--constant MAC_W_Rm_Rn : std_logic_vector(15 downto 0) := "0100XXXXXXXX1111";
+constant MOV_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000XXXXXXXX0110";
+constant MOV_B_GBR_R0 : std_logic_vector(15 downto 0) := "11000000XXXXXXXX";
+constant MOV_W_GBR_R0 : std_logic_vector(15 downto 0) := "11000001XXXXXXXX";
+constant MOV_L_GBR_R0 : std_logic_vector(15 downto 0) := "11000010XXXXXXXX";
+constant MOV_B_R0_GBR : std_logic_vector(15 downto 0) := "11000100XXXXXXXX";
+constant MOV_W_R0_GBR : std_logic_vector(15 downto 0) := "11000101XXXXXXXX";
+constant MOV_L_R0_GBR : std_logic_vector(15 downto 0) := "11000110XXXXXXXX";
+constant MOVA_PC_R0 : std_logic_vector(15 downto 0) := "11000111XXXXXXXX";
+constant MOVT_Rn : std_logic_vector(15 downto 0) := "0000XXXX00101001";
+--constant MUL_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000XXXXXXXX0111";
+--constant MULS_W_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX1111";
+--constant MULU_W_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX1110";
+constant NEG_Rm_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX1011";
+constant NEGC_Rm_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX1010";
+constant NOP : std_logic_vector(15 downto 0) := "0000000000001001";
+constant NOT_Rm_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX0111";
+constant OR_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX1011";
+constant OR_imm_R0 : std_logic_vector(15 downto 0) := "11001011XXXXXXXX";
+constant OR_B_imm_GBR : std_logic_vector(15 downto 0) := "11001111XXXXXXXX";
+constant ROTCL_Rn : std_logic_vector(15 downto 0) := "0100XXXX00100100";
+constant ROTCR_Rn : std_logic_vector(15 downto 0) := "0100XXXX00100101";
+constant ROTL_Rn : std_logic_vector(15 downto 0) := "0100XXXX00000100";
+constant ROTR_Rn : std_logic_vector(15 downto 0) := "0100XXXX00000101";
+constant RTE : std_logic_vector(15 downto 0) := "0000000000101011";
+constant RTS : std_logic_vector(15 downto 0) := "0000000000001011";
+constant SETT : std_logic_vector(15 downto 0) := "0000000000011000";
+constant SHAL_Rn : std_logic_vector(15 downto 0) := "0100XXXX00100000";
+constant SHAR_Rn : std_logic_vector(15 downto 0) := "0100XXXX00100001";
+constant SHLL_Rn : std_logic_vector(15 downto 0) := "0100XXXX00000000";
+constant SHLR_Rn : std_logic_vector(15 downto 0) := "0100XXXX00000001";
+--constant SHLL2_Rn : std_logic_vector(15 downto 0) := "0100XXXX00001000";
+--constant SHLR2_Rn : std_logic_vector(15 downto 0) := "0100XXXX00001001";
+--constant SHLL8_Rn : std_logic_vector(15 downto 0) := "0100XXXX00011000";
+--constant SHLR8_Rn : std_logic_vector(15 downto 0) := "0100XXXX00011001";
+--constant SHLL16_Rn : std_logic_vector(15 downto 0) := "0100XXXX00101000";
+--constant SHLR16_Rn : std_logic_vector(15 downto 0) := "0100XXXX00101001";
+constant SLEEP : std_logic_vector(15 downto 0) := "0000000000011011";
+constant STC_SR_Rn : std_logic_vector(15 downto 0) := "0000XXXX00000010";
+constant STC_GBR_Rn : std_logic_vector(15 downto 0) := "0000XXXX00010010";
+constant STC_VBR_Rn : std_logic_vector(15 downto 0) := "0000XXXX00100010";
+constant STC_L_SR_Rn : std_logic_vector(15 downto 0) := "0100XXXX00000011";
+constant STC_L_GBR_Rn : std_logic_vector(15 downto 0) := "0100XXXX00010011";
+constant STC_L_VBR_Rn : std_logic_vector(15 downto 0) := "0100XXXX00100011";
+--constant STS_MACH_Rn : std_logic_vector(15 downto 0) := "0000XXXX00001010";
+--constant STS_MACL_Rn : std_logic_vector(15 downto 0) := "0000XXXX00011010";
+constant STS_PR_Rn : std_logic_vector(15 downto 0) := "0000XXXX00101010";
+--constant STS_L_MACH_Rn : std_logic_vector(15 downto 0) := "0100XXXX00000010";
+--constant STS_L_MACL_Rn : std_logic_vector(15 downto 0) := "0100XXXX00010010";
+constant STS_L_PR_Rn : std_logic_vector(15 downto 0) := "0100XXXX00100010";
+constant SUB_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1000";
+constant SUBC_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1010";
+constant SUBV_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1011";
+constant SWAP_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX1000";
+constant SWAP_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110XXXXXXXX1001";
+constant TAS_B_Rn : std_logic_vector(15 downto 0) := "0100XXXX00011011";
+constant TRAPA_imm : std_logic_vector(15 downto 0) := "11000011XXXXXXXX";
+constant TST_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX1000";
+constant TST_imm_R0 : std_logic_vector(15 downto 0) := "11001000XXXXXXXX";
+constant TST_B_imm_GBR : std_logic_vector(15 downto 0) := "11001100XXXXXXXX";
+constant XTRCT_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX1101";
+constant XOR_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX1010";
+constant XOR_imm_R0 : std_logic_vector(15 downto 0) := "11001010XXXXXXXX";
+constant XOR_B_imm_GBR : std_logic_vector(15 downto 0) := "11001110XXXXXXXX";
 end SH2_IR_Constants;
 
 library ieee;
