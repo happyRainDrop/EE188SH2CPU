@@ -48,7 +48,7 @@ entity  SH2ALU  is
         SH2ALUOpA   : in      std_logic_vector(regLen - 1 downto 0);   -- first operand (hooked up to reg bus)
         SH2ALUOpB   : in      std_logic_vector(regLen - 1 downto 0);   -- second operand, option 1 (hooked up to reg bus)
         SH2ALUImmediateOperand : in     std_logic_vector(regLen - 1 downto 0); -- other possible second operand (immediate)
-        SH2ALUUseImmediateOperand : in std_logic_vector(regLen-1 downto 0);    -- 1 to use immediate 0 to used ALUOpB
+        SH2ALUUseImmediateOperand : in std_logic;                        -- 1 to use immediate 0 to used ALUOpB
         SH2Cin      : in      std_logic;                                 -- carry in
         SH2FCmd     : in      std_logic_vector(3 downto 0);              -- F-Block operation
         SH2CinCmd   : in      std_logic_vector(1 downto 0);              -- carry in operation
@@ -90,7 +90,7 @@ begin
 
 
     -- ALU: Prepare inputs
-    ALUOpB_input <= SH2ALUOpB when SH2ALUUseImmediateOperand = "0" else SH2ALUImmediateOperand;
+    ALUOpB_input <= SH2ALUOpB when SH2ALUUseImmediateOperand = '0' else SH2ALUImmediateOperand;
     
     -- Hook up ALU inputs and output    
     SH2ALUInstance : ALU

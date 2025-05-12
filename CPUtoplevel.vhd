@@ -278,11 +278,12 @@ architecture Structural of CPUtoplevel is
     signal SH2CinCmd   : std_logic_vector(1 downto 0) := (others => '0');         -- carry in operation
     signal SH2SCmd     : std_logic_vector(2 downto 0) := (others => '0');         -- shift operation
     signal SH2ALUCmd   : std_logic_vector(1 downto 0) := (others => '0');         -- ALU result select
+    signal SH2Cin      : std_logic;
     -- ALU additional from control line inputs (not directly from generic ALU)
     signal SH2ALUImmediateOperand      : std_logic_vector(regLen-1 downto 0) := (others => '0'); -- control unit should pad it (with 1s or 0s
                                                                                                 -- based on whether it's signed or not)
                                                                                                 -- before giving us immediate operand
-    signal SH2ALUUseImmediateOperand   : std_logic_vector(regLen-1 downto 0) := (others => '0'); -- 1 for use immediate operand, 0 otherwise
+    signal SH2ALUUseImmediateOperand   : std_logic; -- 1 for use immediate operand, 0 otherwise
     -- ALU OUTPUTS
     signal SH2ALUResult   : std_logic_vector(regLen - 1 downto 0) := (others => '0');            -- ALU result
     signal FlagBus        : std_logic_vector(4 downto 0) := (others => '0');                     -- Flags are Cout, HalfCout, Overflow, Zero, Sign
@@ -311,6 +312,7 @@ architecture Structural of CPUtoplevel is
     -- PMAU added inputs (not directly from generic MAU)
     signal PMAUImmediateSource : std_logic_vector(regLen-1 downto 0) := (others => '0');
     signal PMAUImmediateOffset : std_logic_vector(regLen-1 downto 0) := (others => '0');
+    
     -- PMAU OUTPUTS
     signal SH2ProgramAddressBus : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- PMAU input address, updated
                                                                                             -- (Control unit uses to update PC)
@@ -331,8 +333,9 @@ architecture Structural of CPUtoplevel is
     type states is (ZERO_CLK, FETCH_IR, END_OF_FILE); 
     --TWO_CLK_W, TWO_CLK_R, THREE_CLK_R, THREE_CLK_W);
     signal CurrentState     : states;
-    variable NextState      : states;
+    signal NextState      : states; --ughghghhggh
     signal InstructionReg   : std_logic_vector(15 downto 0);
+    signal ClockCounter     : std_logic_vector(31 downto 0);
 
 
 begin
@@ -394,8 +397,6 @@ begin
             SH2ALUResult   => SH2ALUResult,  -- now we are just hooking up outputs
             FlagBus     => FlagBus
         );
-    
-        
 
     -- Instantiate DMAU
     SH2DMAU : entity  work.SH2DMAU
@@ -443,11 +444,58 @@ begin
                 --Stop the PC
         if rising_edge(SH2clock) then
             case CurrentState is 
-                when ZERO_CLK
+                when ZERO_CLK =>
+                    --Setting PMAU control signals
 
-                when FETCH_IR
-                
-                when END_OF_FILE
+                    --Do I need to set offset/immediate?
+                    --Will need to for multi-clock
+                    SH2PMAUSrcSel           <= 0;
+                    SH2PMAUOffsetSel        <= 0;
+                    SH2PMAUIncDecSel        <= '0';
+                    SH2PMAUIncDecBit        <= 0;
+                    SH2PMAUPrePostSel       <= '0';
+
+                    --Fetching first instruction
+                    InstructionReg          <= SH2DataBus(15 downto 0);
+
+                when FETCH_IR =>
+                    --Set clock counter back to 1
+                    ClockCounter            <= "00000000000000000000000000000001";
+                    
+                    --Setting PMAU control signals
+                    SH2PMAUSrcSel           <= 0;
+                    PMAUImmediateSource  <= ClockCounter;
+                    SH2PMAUOffsetSel        <= 0;
+                    SH2PMAUIncDecSel        <= '0';
+                    SH2PMAUIncDecBit        <= 0;
+                    SH2PMAUPrePostSel       <= '0';
+
+
+                    --Fecthing the next instruction
+                    InstructionReg          <= SH2DataBus(15 downto 0);
+
+                when END_OF_FILE =>
+                    --Setting PMAU control signals
+                    SH2PMAUSrcSel           <= 0;
+                    SH2PMAUOffsetSel        <= 0;
+                    SH2PMAUIncDecSel        <= '0';
+                    SH2PMAUIncDecBit        <= 0;
+                    SH2PMAUPrePostSel       <= '0';
+
+                    --Setting instruction register to NOP
+                    InstructionReg          <= NOP;
+
+                when others =>
+                    --Should not get here
+                    --But if it does, do not update the PC
+                    SH2PMAUSrcSel           <= 0;
+                    SH2PMAUOffsetSel        <= 0;
+                    SH2PMAUIncDecSel        <= '0';
+                    SH2PMAUIncDecBit        <= 0;
+                    SH2PMAUPrePostSel       <= '0';
+
+                    --Do nothing
+                    InstructionReg          <= NOP;
             end case;
         --On the falling edge of the CurrentState
         --Update Read and Write for correct RAM interaction based on state
@@ -460,38 +508,51 @@ begin
             --END_OF_FILE
                 --Read enabled for RAM dumping
                 --Write remains disabled for RAM dumping
-        elsif fallling_edge(SH2clock) then
+        elsif falling_edge(SH2clock) then
             case CurrentState is 
-                when ZERO_CLK
-                    RE0 <= 0;
-                    RE1 <= 0;
-                    RE2 <= 0;
-                    RE3 <= 0;
+                when ZERO_CLK =>
+                    RE0 <= '0';
+                    RE1 <= '0';
+                    RE2 <= '0';
+                    RE3 <= '0';
 
-                    WE0 <= 1;
-                    WE1 <= 1;
-                    WE2 <= 1;
-                    WE3 <= 1;
-                when FETCH_IR
-                    RE0 <= 0;
-                    RE1 <= 0;
-                    RE2 <= 0;
-                    RE3 <= 0;
+                    WE0 <= '1';
+                    WE1 <= '1';
+                    WE2 <= '1';
+                    WE3 <= '1';
 
-                    WE0 <= 1;
-                    WE1 <= 1;
-                    WE2 <= 1;
-                    WE3 <= 1;
-                when END_OF_FILE
-                    RE0 <= 0;
-                    RE1 <= 0;
-                    RE2 <= 0;
-                    RE3 <= 0;
+                when FETCH_IR =>
+                    RE0 <= '0';
+                    RE1 <= '0';
+                    RE2 <= '0';
+                    RE3 <= '0';
 
-                    WE0 <= 1;
-                    WE1 <= 1;
-                    WE2 <= 1;
-                    WE3 <= 1;            
+                    WE0 <= '1';
+                    WE1 <= '1';
+                    WE2 <= '1';
+                    WE3 <= '1';
+
+                when END_OF_FILE =>
+                    RE0 <= '0';
+                    RE1 <= '0';
+                    RE2 <= '0';
+                    RE3 <= '0';
+
+                    WE0 <= '1';
+                    WE1 <= '1';
+                    WE2 <= '1';
+                    WE3 <= '1';    
+
+                when others =>
+                    RE0 <= '1';
+                    RE1 <= '1';
+                    RE2 <= '1';
+                    RE3 <= '1';
+        
+                    WE0 <= '1';
+                    WE1 <= '1';
+                    WE2 <= '1';
+                    WE3 <= '1';
                 end case;
             end if;
     end process;
@@ -503,34 +564,93 @@ begin
         if rising_edge(SH2clock) then 
             CurrentState <= NextState;
 
-            RE0 <= 1;
-            RE1 <= 1;
-            RE2 <= 1;
-            RE3 <= 1;
+            RE0 <= '1';
+            RE1 <= '1';
+            RE2 <= '1';
+            RE3 <= '1';
 
-            WE0 <= 1;
-            WE1 <= 1;
-            WE2 <= 1;
-            WE3 <= 1;
+            WE0 <= '1';
+            WE1 <= '1';
+            WE2 <= '1';
+            WE3 <= '1';
         end if;
     end process;
 
 --combinational if statements
 --Matches the 
 --at the end of the matches -> update the currentstate with nextState variable
-    if std_match(CurrentState, END_OF_FILE) then 
+    process(SH2clock)
+    begin
+    if rising_edge(SH2clock) then
+    if CurrentState = END_OF_FILE then 
         --Do NOP CS
         --NextState is end of file
+        --Setting Reg Array control signals
+        SH2RegStore <= '0';
+        SH2RegAxStore <= '0';
+            
         if std_match(ADD_imm_Rn, InstructionReg) then
+            --Setting Reg Array control signals
+            SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+            
+            --Setting ALU control signals
+            SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
+            SH2ALUUseImmediateOperand   <= '0';
+            SH2Cin                      <= '0';     --Could probably use "else" case to reassign the default values, as some of these are only set in specific commands
+            SH2FCmd                     <= "0000";
+            SH2CinCmd                   <= "00";
+            SH2SCmd                     <= "000";   --Doesn't matter what this does, not selecting the output
+            SH2ALUCmd                   <= "01";          
 
-            elsif std_match(ROTL_Rn, InstructionReg) then
+        elsif std_match(SHLL_Rn, InstructionReg) then
+            --Setting Reg Array control signals
+            SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+            SH2RegStore <= '0';
+            SH2RegAxStore <= '0';
+
+            --Setting ALU control signals
+            SH2Cin                      <= '0';
+            SH2FCmd                     <= "0000";
+            SH2CinCmd                   <= "00";
+            SH2SCmd                     <= "000";
+            SH2ALUCmd                   <= "10";
             
-            elsif std_match(AND_Rm_Rn, InstructionReg) then
+        elsif std_match(AND_Rm_Rn, InstructionReg) then
+            --Setting Reg Array control signals
+            SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
+            SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+            SH2RegStore <= '0';
+            SH2RegAxStore <= '0';
+
+            --Setting ALU control signals
+            SH2Cin                      <= '0';
+            SH2FCmd                     <= "1000";
+            SH2CinCmd                   <= "00";
+            SH2SCmd                     <= "000";
+            SH2ALUCmd                   <= "00";
         
-            elsif std_match(LDC_Rm_SR, InstructionReg) then
-        
-            elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
-            
-            end if;
+        elsif std_match(NOP, InstructionReg) then
+            --Setting Reg Array control signals
+            SH2RegStore <= '0';
+            SH2RegAxStore <= '0';
+
+        else
+            --Setting Reg Array control signals
+            SH2RegStore <= '0';
+            SH2RegAxStore <= '0';
+        end if;
+    else
     end if;
+    end if;
+        end process;
+
+    -- Set buses
+    SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
+        RegArrayOutA when SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT else
+        SH2ALUResult;
+
+    SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
+        SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
+        SH2ProgramAddressSrc;
+
 end Structural;
