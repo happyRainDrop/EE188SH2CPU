@@ -11,6 +11,7 @@
 --      7 May 25  Ruth Berkun       Test writing one number to a single address in RAM
 --      9 May 25  Ruth Berkun       Test all of memory is filled completed (with each of the 4 blocks having 8 32-bit words)
 --      12 May 25  Ruth Berkun      Modify reading portion to come from text file
+--      12 May 25  Ruth Berkun      Add Enable signal
 ----------------------------------------------------------------------------
 
 library ieee;
@@ -33,6 +34,7 @@ architecture behavior of CPU_Testbench is
     component CPUtoplevel
         port(
             Reset          : in  std_logic;
+            Enable         : inout std_logic;
             NMI            : in  std_logic;
             INT            : in  std_logic;
             RE0, RE1, RE2, RE3 : out std_logic;
@@ -45,6 +47,7 @@ architecture behavior of CPU_Testbench is
 
     -- DUT signals
     signal Reset          : std_logic := '1';
+    signal Enable          : std_logic := '0';
     signal NMI            : std_logic := '0';
     signal INT            : std_logic := '0';
     signal RE0, RE1, RE2, RE3 : std_logic;
@@ -75,6 +78,7 @@ begin
     DUT: CPUtoplevel
         port map (
             Reset          => Reset,
+            Enable         => Enable,
             NMI            => NMI,
             INT            => INT,
             RE0            => RE0,
@@ -99,6 +103,9 @@ begin
     begin
 
         ------------------------------------------------------------------- INIT
+
+        Enable <= '0';
+
         -- Reset (active low)
         Reset <= '0';
         wait for 20 ns;
@@ -159,8 +166,13 @@ begin
         file_close(infile);
         SH2DataBus <= (others => 'Z');         -- so that reading can access
 
+        Enable <= '1';   -- let CPU do its thing
+        report "Ready for CPU to access memory.";
+
         -------------------------------------------------------------------- READING
 
+        wait until Enable = '0';
+        report "CPU DONE!!";
         -- Read all memory contents
         write(L, string'("Memory Dump by Block (32 words each):")); 
         writeline(mem_dump, L);

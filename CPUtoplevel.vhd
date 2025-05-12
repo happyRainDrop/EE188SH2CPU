@@ -27,7 +27,9 @@
 --      9 May 25  Nerissa Finnen    Updated IR constants. Started finite state machine functionality
 --                                  and control signal settings. 
 --     12 May 25  Ruth Berkun       Added over constants       
---     12 May 25  Nerissa Finnen    Finished finite state machine initial implementation, added 5 instructions                      
+--     12 May 25  Nerissa Finnen    Finished finite state machine initial implementation, added 5 instructions    
+--     12 May 25  Ruth Berkun       State machine adjustments, start process IR logic 
+--                                  Add Enable signal: allow CPU and testbench to tell each other when they are reading/writing               
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -37,6 +39,7 @@ package SH2_CPU_Constants is
 
     -- Memory instantiation
     constant memBlockWordSize : integer := 25;  -- 4 words in every memory block
+    constant instrLen : integer := 16;
 
     -- Register and word size configuration
     constant regLen       : integer := 32;   -- Each register is 32 bits
@@ -265,6 +268,8 @@ entity CPUtoplevel is
     port(
         
         Reset   :  in     std_logic;                       -- reset signal (active low)
+        Enable  :  inout  std_logic;                       -- high when CPU can read/write, low when testbench reads/writes
+
         NMI     :  in     std_logic;                       -- non-maskable interrupt signal (falling edge)
         INT     :  in     std_logic;                       -- maskable interrupt signal (active low)
 
@@ -281,7 +286,6 @@ entity CPUtoplevel is
         SH2DataBus : buffer  std_logic_vector(regLen - 1 downto 0);   -- stores data to read/write from memory
         SH2AddressBus : buffer  std_logic_vector(regLen - 1 downto 0)   -- stores address to read/write from memory
 
-
     );
 end CPUtoplevel;
 
@@ -289,6 +293,7 @@ end CPUtoplevel;
 architecture Structural of CPUtoplevel is
 
     -- Control Signals --
+    --==================================================================================================================================================
     ------------------------------------------------------------------------------------------------------------------
     -- REG ARRAY FROM CONTROL UNIT INPUTS (for selecting reg in/out control)
     signal SH2RegIn      : std_logic_vector(regLen - 1 downto 0) := (others => '0');
@@ -349,6 +354,9 @@ architecture Structural of CPUtoplevel is
     signal SH2ProgramAddressSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- PMAU input address, updated
                                                                                             -- (Control unit uses to update PC) 
     ------------------------------------------------------------------------------------------
+    
+    -- Outputs
+    --==================================================================================================================================================
     -- CONTROL OUTPUTS
     signal SH2SelDataBus    : integer range NUM_DATA_BUS_OPTIONS downto 0 := OPEN_DATA_BUS;     -- do not update, update with reg output, or update with ALU output
     signal SH2SelAddressBus : integer range NUM_ADDRESS_BUS_OPTIONS downto 0 := OPEN_ADDRESS_BUS;  -- do not update, update with PMAU address out, or update with DMAU address out
@@ -359,16 +367,24 @@ architecture Structural of CPUtoplevel is
     signal RegArrayOutA1 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     ------------------------------------------------------------------------------------------
+
+    -- Signals and states
+    --==================================================================================================================================================
     -- CPU top level signals; finite state machine and IR
     type states is (ZERO_CLK, FETCH_IR, END_OF_FILE); 
     --TWO_CLK_W, TWO_CLK_R, THREE_CLK_R, THREE_CLK_W);
     signal CurrentState     : states;
     signal NextState      : states; --ughghghhggh
-    signal InstructionReg   : std_logic_vector(15 downto 0);
-    signal ClockCounter     : std_logic_vector(31 downto 0);
+
+    signal InstructionReg   : std_logic_vector(15 downto 0); -- IR
+    signal ClockCounter     : std_logic_vector(31 downto 0); -- what clock cycle are we on?
+    signal store_opcode_in_low_byte : std_logic := '0';  -- store in high byte then low byte
+
+    
 
 
 begin
+
 
     SH2ExternalMemory : entity work.MEMORY32x32
         generic map (
@@ -444,7 +460,7 @@ begin
             SH2DataAddressSrc => SH2DataAddressSrc
         );
 
-    -- Instantiate DMAU
+    -- Instantiate PMAU
     SH2PMAU : entity  work.SH2PMAU
         port map(
             SH2PMAURegSource => RegArrayOutA, 
@@ -460,7 +476,7 @@ begin
             SH2ProgramAddressSrc => SH2ProgramAddressSrc
         );    
     
-    process(SH2clock)
+    updatePCandIRandSetNextState: process(SH2clock)
     begin
         --On the rising edge of the CurrentState
         --Perform state-specific tasks
@@ -473,8 +489,17 @@ begin
             --END_OF_FILE
                 --Stop the PC
         if rising_edge(SH2clock) then
+
+            -- Reset reading or writing when clock is high
+            WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
+            RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; 
+
             case CurrentState is 
                 when ZERO_CLK =>
+
+                    report "enable = " & std_logic'image(Enable);
+
+                    ------------------------------------------------ Setting control signals
                     --Setting PMAU control signals
 
                     --Do I need to set offset/immediate?
@@ -485,10 +510,16 @@ begin
                     SH2PMAUIncDecBit        <= 0;
                     SH2PMAUPrePostSel       <= '0';
 
-                    --Fetching first instruction
-                    InstructionReg          <= SH2DataBus(15 downto 0);
+                    ------------------------------------------------ Update state
+                    if (Enable = '1') then
+                        CurrentState <= FETCH_IR;
+                    else 
+                        CurrentState <= ZERO_CLK;
+                    end if;
 
                 when FETCH_IR =>
+
+                    ------------------------------------------------ Setting control signals
                     --Set clock counter back to 1
                     ClockCounter            <= "00000000000000000000000000000001";
                     
@@ -496,24 +527,32 @@ begin
                     SH2PMAUSrcSel           <= 0;
                     PMAUImmediateSource  <= ClockCounter;
                     SH2PMAUOffsetSel        <= 0;
-                    SH2PMAUIncDecSel        <= '0';
+                    SH2PMAUIncDecSel        <= '1';
                     SH2PMAUIncDecBit        <= 0;
                     SH2PMAUPrePostSel       <= '0';
 
-
-                    --Fecthing the next instruction
-                    InstructionReg          <= SH2DataBus(15 downto 0);
+                    ------------------------------------------------ Set next state
+                    if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
+                        CurrentState <= END_OF_FILE;
+                    else 
+                        CurrentState <= FETCH_IR;
+                    end if;
 
                 when END_OF_FILE =>
+                    
+                    -------------------------------------------------- Setting control signals
                     --Setting PMAU control signals
                     SH2PMAUSrcSel           <= 0;
                     SH2PMAUOffsetSel        <= 0;
                     SH2PMAUIncDecSel        <= '0';
                     SH2PMAUIncDecBit        <= 0;
                     SH2PMAUPrePostSel       <= '0';
+                    SH2SelDataBus <= OPEN_DATA_BUS;         -- no writing to buses when end of file!
+                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
 
-                    --Setting instruction register to NOP
-                    InstructionReg          <= NOP;
+                    -------------------------------------------------- Update state
+                    CurrentState <= END_OF_FILE;
+                    Enable <= '0';    -- let testbench know it can dump RAM
 
                 when others =>
                     --Should not get here
@@ -527,6 +566,7 @@ begin
                     --Do nothing
                     InstructionReg          <= NOP;
             end case;
+        end if;
         --On the falling edge of the CurrentState
         --Update Read and Write for correct RAM interaction based on state
             --ZERO_CLK
@@ -538,8 +578,56 @@ begin
             --END_OF_FILE
                 --Read enabled for RAM dumping
                 --Write remains disabled for RAM dumping
-            end if;
-    end process;
+        if falling_edge(SH2clock) then
+            case CurrentState is
+                when ZERO_CLK =>
+
+                    ------------------------------------------------ Load in first instruction
+                    --Fetching first instruction (high bytes of DataBus)
+                    if (Enable = '1') then
+                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- not writing only read high bytes
+                        RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0';
+                        InstructionReg          <= SH2DataBus(regLen-1 downto instrLen);
+                    else 
+                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- no reading or writing
+                        RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1';
+                        InstructionReg          <= (others => 'X');
+                    end if;
+
+                when FETCH_IR =>
+                     ---------------------------------------------------------- Fetch the next instruction
+                    
+                    if (store_opcode_in_low_byte = '0') then
+                        -- Read high bytes in, write disable
+                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
+                        RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0'; 
+                        InstructionReg <= SH2DataBus(regLen-1 downto instrLen); 
+
+                        -- next write, write low byte of same address
+                        store_opcode_in_low_byte <= '1';
+                    else
+                        -- Read low bytes in, write disable
+                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
+                        RE0 <= '0'; RE1 <= '0'; RE2 <= '1'; RE3 <= '1'; 
+                        InstructionReg <= SH2DataBus(instrLen-1 downto 0); 
+
+                        -- written low byte so next instruction need to write high byte of new memory location
+                        store_opcode_in_low_byte <= '0';
+
+                    end if;
+
+                    report "IR = " & to_hstring(InstructionReg);
+                    
+                when others =>
+
+                        InstructionReg <= NOP;
+                        SH2SelDataBus <= OPEN_DATA_BUS;         -- no writing to buses when end of file!
+                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
+                        RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; 
+            end case;
+        end if;
+    end process updatePCandIRandSetNextState;
 
     --Update the CurrentState to the NextState every rising edge of the clock
     --Set Read and Write to inactive during the rising edge of the clock
@@ -548,70 +636,63 @@ begin
 --combinational if statements
 --Matches the 
 --at the end of the matches -> update the currentstate with nextState variable
-    process(SH2clock)
+    matchInstruction : process(SH2clock)
     begin
-    if rising_edge(SH2clock) then
-    if CurrentState = END_OF_FILE then 
-        --Do NOP CS
-        --NextState is end of file
-        --Setting Reg Array control signals
-        SH2RegStore <= '0';
-        SH2RegAxStore <= '0';
+        if rising_edge(SH2clock) then
+                
+            if std_match(ADD_imm_Rn, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                
+                --Setting ALU control signals
+                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
+                SH2ALUUseImmediateOperand   <= '0';
+                SH2Cin                      <= '0';     --Could probably use "else" case to reassign the default values, as some of these are only set in specific commands
+                SH2FCmd                     <= "0000";
+                SH2CinCmd                   <= "00";
+                SH2SCmd                     <= "000";   --Doesn't matter what this does, not selecting the output
+                SH2ALUCmd                   <= "01";          
+
+            elsif std_match(SHLL_Rn, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegStore <= '0';
+                SH2RegAxStore <= '0';
+
+                --Setting ALU control signals
+                SH2Cin                      <= '0';
+                SH2FCmd                     <= "0000";
+                SH2CinCmd                   <= "00";
+                SH2SCmd                     <= "000";
+                SH2ALUCmd                   <= "10";
+                
+            elsif std_match(AND_Rm_Rn, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
+                SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegStore <= '0';
+                SH2RegAxStore <= '0';
+
+                --Setting ALU control signals
+                SH2Cin                      <= '0';
+                SH2FCmd                     <= "1000";
+                SH2CinCmd                   <= "00";
+                SH2SCmd                     <= "000";
+                SH2ALUCmd                   <= "00";
             
-        if std_match(ADD_imm_Rn, InstructionReg) then
-            --Setting Reg Array control signals
-            SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-            
-            --Setting ALU control signals
-            SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-            SH2ALUUseImmediateOperand   <= '0';
-            SH2Cin                      <= '0';     --Could probably use "else" case to reassign the default values, as some of these are only set in specific commands
-            SH2FCmd                     <= "0000";
-            SH2CinCmd                   <= "00";
-            SH2SCmd                     <= "000";   --Doesn't matter what this does, not selecting the output
-            SH2ALUCmd                   <= "01";          
+            elsif std_match(NOP, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegStore <= '0';
+                SH2RegAxStore <= '0';
 
-        elsif std_match(SHLL_Rn, InstructionReg) then
-            --Setting Reg Array control signals
-            SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-            SH2RegStore <= '0';
-            SH2RegAxStore <= '0';
+            else
+                --Setting Reg Array control signals
+                SH2RegStore <= '0';
+                SH2RegAxStore <= '0';
+            end if;
 
-            --Setting ALU control signals
-            SH2Cin                      <= '0';
-            SH2FCmd                     <= "0000";
-            SH2CinCmd                   <= "00";
-            SH2SCmd                     <= "000";
-            SH2ALUCmd                   <= "10";
-            
-        elsif std_match(AND_Rm_Rn, InstructionReg) then
-            --Setting Reg Array control signals
-            SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-            SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-            SH2RegStore <= '0';
-            SH2RegAxStore <= '0';
-
-            --Setting ALU control signals
-            SH2Cin                      <= '0';
-            SH2FCmd                     <= "1000";
-            SH2CinCmd                   <= "00";
-            SH2SCmd                     <= "000";
-            SH2ALUCmd                   <= "00";
-        
-        elsif std_match(NOP, InstructionReg) then
-            --Setting Reg Array control signals
-            SH2RegStore <= '0';
-            SH2RegAxStore <= '0';
-
-        else
-            --Setting Reg Array control signals
-            SH2RegStore <= '0';
-            SH2RegAxStore <= '0';
         end if;
-    else
-    end if;
-    end if;
-        end process;
+    end process matchInstruction;
 
     -- Set buses
     SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
