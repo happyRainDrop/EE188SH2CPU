@@ -14,6 +14,7 @@
 --  Revision History:
 --     24 Apr 25  Ruth Berkun       Copied over from mau.vhd template
 --      3 May 25  Ruth Berkun       Fix shifting syntax error, added constants package
+--     12 May 25  Ruth Berkun       Move the GBR, VBR into the DMAU
 ----------------------------------------------------------------------------
 
 library ieee;
@@ -22,12 +23,27 @@ package SH2DMAUConstants is
 
   -- Register and word size configuration
   constant regLen       : integer := 32;   -- Each register is 32 bits
-  constant regCount     : integer := 21;   -- 16 general + 5 special registers
+  constant regCount     : integer := 18;   -- 16 general + 2 special registers
 
   -- DMAU configuration
-  constant dmauSourceCount  : integer := 2;    -- from reg array (Register, GBR, PC) or immediate
+  constant dmauSourceCount  : integer := 4;    -- from reg array, GBR, VBR, or immediate
   constant dmauOffsetCount  : integer := 7;    -- 0, R0x1, R0x2, R0x4, Immx1, Immx2, Immx4
   constant maxIncDecBitDMAU     : integer := 3;    -- Allow inc/dec up to bit 3 (+-4) 
+
+    -- DMAU source select
+  constant DMAU_SRC_SEL_GBR : integer := 0;
+  constant DMAU_SRC_SEL_VBR : integer := 1;
+  constant DMAU_SRC_SEL_REG : integer := 2;
+  constant DMAU_SRC_SEL_IMM : integer := 3;
+
+  -- DMAU offset select
+  constant DMAU_OFFSET_SEL_ZEROES : integer := 0;
+  constant DMAU_OFFSET_SEL_REG_OFFSET_x1 : integer := 1;
+  constant DMAU_OFFSET_SEL_REG_OFFSET_x2 : integer := 2;
+  constant DMAU_OFFSET_SEL_REG_OFFSET_x4 : integer := 3;
+  constant DMAU_OFFSET_SEL_IMM_OFFSET_x1 : integer := 4;
+  constant DMAU_OFFSET_SEL_IMM_OFFSET_x2 : integer := 5;
+  constant DMAU_OFFSET_SEL_IMM_OFFSET_x4 : integer := 6;
 
 end package;
 
@@ -63,7 +79,7 @@ architecture  behavioral  of  SH2DMAU  is
             srcCnt       : integer;
             offsetCnt    : integer;
             maxIncDecBit : integer := 0; -- default is only inc/dec bit 0
-            wordsize     : integer := 16 -- default address width is 16 bits
+            wordsize     : integer := 32 -- default address width is 32 bits
         );
 
         port(
@@ -79,6 +95,10 @@ architecture  behavioral  of  SH2DMAU  is
         );
     end component;
 
+    -- GBR and VBR
+    signal SH2GBR : std_logic_vector(regLen-1 downto 0) := (others => '0');
+    signal SH2VBR : std_logic_vector(regLen-1 downto 0) := (others => '0');
+
     -- DMAU source arrays
     signal SH2DMAUAddrSrc : std_logic_array(dmauSourceCount - 1 downto 0)(regLen - 1 downto 0);
     signal SH2DMAUAddrOff :std_logic_array(dmauOffsetCount - 1 downto 0)(regLen - 1 downto 0);
@@ -87,16 +107,19 @@ begin
 
     -- DMAU: Prepare inputs
     -- Fill source array. 
-    SH2DMAUAddrSrc(0) <= SH2DMAURegSource; --Sources can come from register array (general register, GBR, or PC)
-    SH2DMAUAddrSrc(1) <= SH2DMAUImmediateSource; --or be an immediate value from the control unit
+    SH2DMAUAddrSrc(DMAU_SRC_SEL_REG) <= SH2DMAURegSource; --Sources can come from register array (general register)
+    SH2DMAUAddrSrc(DMAU_SRC_SEL_IMM) <= SH2DMAUImmediateSource; --or be an immediate value from the control unit
+    SH2DMAUAddrSrc(DMAU_SRC_SEL_GBR) <= SH2GBR;
+    SH2DMAUAddrSrc(DMAU_SRC_SEL_VBR) <= SH2VBR;
+
     -- Fill offset array.
-    SH2DMAUAddrOff(0) <= (others => '0');  -- Offset can be all zeros (no offset)
-    SH2DMAUAddrOff(1) <= SH2DMAURegOffset;  -- or registervalue × 1
-    SH2DMAUAddrOff(2) <= SH2DMAURegOffset sll 1;  -- registervalue × 2
-    SH2DMAUAddrOff(3) <= SH2DMAURegOffset sll 2;  -- registervalue × 4
-    SH2DMAUAddrOff(4) <= SH2DMAUImmediateOffset;  -- pr ImmValue × 1
-    SH2DMAUAddrOff(5) <= SH2DMAUImmediateOffset sll 1;  -- ImmValue × 2
-    SH2DMAUAddrOff(6) <= SH2DMAUImmediateOffset sll 2;  -- ImmValue × 4
+    SH2DMAUAddrOff(DMAU_OFFSET_SEL_ZEROES) <= (others => '0');  -- Offset can be all zeros (no offset)
+    SH2DMAUAddrOff(DMAU_OFFSET_SEL_REG_OFFSET_x1) <= SH2DMAURegOffset;  -- or registervalue × 1
+    SH2DMAUAddrOff(DMAU_OFFSET_SEL_REG_OFFSET_x2) <= SH2DMAURegOffset sll 1;  -- registervalue × 2
+    SH2DMAUAddrOff(DMAU_OFFSET_SEL_REG_OFFSET_x4) <= SH2DMAURegOffset sll 2;  -- registervalue × 4
+    SH2DMAUAddrOff(DMAU_OFFSET_SEL_IMM_OFFSET_x1) <= SH2DMAUImmediateOffset;  -- pr ImmValue × 1
+    SH2DMAUAddrOff(DMAU_OFFSET_SEL_IMM_OFFSET_x2) <= SH2DMAUImmediateOffset sll 1;  -- ImmValue × 2
+    SH2DMAUAddrOff(DMAU_OFFSET_SEL_IMM_OFFSET_x4) <= SH2DMAUImmediateOffset sll 2;  -- ImmValue × 4
 
 
     SH2DMAUInstance : MemUnit

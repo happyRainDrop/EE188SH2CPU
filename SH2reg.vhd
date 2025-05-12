@@ -17,6 +17,7 @@
 --     11 Apr 25  Glen George       Added separate address register interface.
 --     22 Apr 25  Ruth Berkun       Copied over for SH2Reg
 --      3 May 25  Ruth Berkun       Fix syntax errors, hook up 0s to unused reg.vhd ports
+--     12 May 25  Ruth Berkun       Remove PC, GBR, VBR from reg array
 ----------------------------------------------------------------------------
 
 --
@@ -30,7 +31,7 @@ package SH2RegConstants is
 
   -- Register and word size configuration
   constant regLen       : integer := 32;   -- Each register is 32 bits
-  constant regCount     : integer := 21;   -- 16 general + 5 special registers
+  constant regCount     : integer := 18;   -- 16 general + 2 special registers (PR, SR)
 
 end package;
 
@@ -65,7 +66,7 @@ architecture  behavioral  of  SH2RegArray  is
 	component  RegArray
         generic (
             regcnt   : integer := regCount;    -- default number of registers is 21: 16 general registers, 
-            -- 5 more registers for PC, PR, GBR, VBR, SR
+            -- 2 more registers for PR, SR
             wordsize : integer := regLen     -- default width is 32-bits (each register is 32 bits long)
         );
 
