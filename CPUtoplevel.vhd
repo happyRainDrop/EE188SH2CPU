@@ -26,7 +26,8 @@
 --      7 May 25  Nerissa Finnen    Started read-in file functionality
 --      9 May 25  Nerissa Finnen    Updated IR constants. Started finite state machine functionality
 --                                  and control signal settings. 
---     12 May 25  Ruth Berkun       Added over constants                             
+--     12 May 25  Ruth Berkun       Added over constants       
+--     12 May 25  Nerissa Finnen    Finished finite state machine initial implementation, added 5 instructions                      
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
