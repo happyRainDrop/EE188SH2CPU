@@ -165,13 +165,15 @@ begin
 
         file_close(infile);
         SH2DataBus <= (others => 'Z');         -- so that reading can access
+        SH2AddressBus <= (others => 'Z');         -- so that reading can access
 
         Enable <= '1';   -- let CPU do its thing
         report "Ready for CPU to access memory.";
 
         -------------------------------------------------------------------- READING
 
-        wait until Enable = '0';
+        wait for 100 ns;
+
         report "CPU DONE!!";
         -- Read all memory contents
         write(L, string'("Memory Dump by Block (32 words each):")); 

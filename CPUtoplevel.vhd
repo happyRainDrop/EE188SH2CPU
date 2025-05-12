@@ -525,7 +525,7 @@ begin
                     
                     --Setting PMAU control signals
                     SH2PMAUSrcSel           <= 0;
-                    PMAUImmediateSource  <= ClockCounter;
+                    -- PMAUImmediateSource  <= ClockCounter;
                     SH2PMAUOffsetSel        <= 0;
                     SH2PMAUIncDecSel        <= '1';
                     SH2PMAUIncDecBit        <= 0;
@@ -552,7 +552,7 @@ begin
 
                     -------------------------------------------------- Update state
                     CurrentState <= END_OF_FILE;
-                    Enable <= '0';    -- let testbench know it can dump RAM
+                    -- Enable <= '0';    -- let testbench know it can dump RAM
 
                 when others =>
                     --Should not get here
@@ -616,7 +616,8 @@ begin
 
                     end if;
 
-                    report "IR = " & to_hstring(InstructionReg);
+                    report "IR = " & to_hstring(SH2DataBus);
+                    report "PC = " & to_hstring(SH2AddressBus);
                     
                 when others =>
 
