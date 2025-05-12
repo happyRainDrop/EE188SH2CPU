@@ -1,3 +1,18 @@
+----------------------------------------------------------------------------
+--
+--  CPU_Testbench.vhd
+--
+--  Simulates 
+--
+--  Entities instantiated:
+--      - CPUtoplevel
+--
+--  Revision History:
+--      7 May 25  Ruth Berkun       Test writing one number to a single address in RAM
+--      9 May 25  Ruth Berkun       Test all of memory is filled completed (with each of the 4 blocks having 8 32-bit words)
+--      12 May 25  Ruth Berkun      Modify reading portion to come from text file
+----------------------------------------------------------------------------
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -10,8 +25,10 @@ end CPU_Testbench;
 
 architecture behavior of CPU_Testbench is
 
-    constant memBlockWordSize : integer := 8;
+    constant memBlockWordSize : integer := 25;
     constant regLen : integer := 32;
+    constant instrLen : integer := 16;
+    constant zeroes16 : std_logic_vector(15 downto 0) := (others => '0');
 
     component CPUtoplevel
         port(
@@ -39,7 +56,8 @@ architecture behavior of CPU_Testbench is
     -- Internal memory access (assumes internal memory is accessible)
     signal RAMbits0, RAMbits1, RAMbits2, RAMbits3 : std_logic_vector(31 downto 0);
 
-    -- For output
+    -- For input and output
+    file infile : text open read_mode is "cpu_test_program.txt";
     file mem_dump : text open write_mode is "cpu_mem_output.txt";
 
 begin
@@ -75,9 +93,12 @@ begin
     -- Test sequence
     stimulus: process
         variable L : line;
+        variable addr : integer := 0;
+        variable opcode : std_logic_vector(instrLen-1 downto 0);
+        variable store_opcode_in_low_byte : std_logic := '0';  -- store in high byte then low byte
     begin
 
-        ------------------------------------------------------------------- START
+        ------------------------------------------------------------------- INIT
         -- Reset (active low)
         Reset <= '0';
         wait for 20 ns;
@@ -97,21 +118,46 @@ begin
 
         -------------------------------------------------------------------- WRITING
 
-        for i in 0 to 3 loop        -- Loop over memory blocks
+        -- Code block to load SH-2 machine code into RAM block 0
+        -- Assumes machine code is stored as 16-bit hexadecimal values (one per line)
+        -- and loads them starting at START_ADDR0.
 
-            for j in 0 to memBlockWordSize-1 loop   -- Looping over addresses in memory blocks
 
-                -- Read bytes individually
+        while not endfile(infile) loop
+            readline(infile, L);
+            read(L, opcode);
+
+            report "addr = " & integer'image(addr);
+
+            if (store_opcode_in_low_byte = '0') then
+                -- Write bytes individually
                 wait until falling_edge(SH2clock);
-                SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
-                SH2DataBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
-                WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0'; 
+                SH2AddressBus <= std_logic_vector(to_unsigned(addr, 32)); 
+                SH2DataBus <= opcode & zeroes16; 
+                WE0 <= '1'; WE1 <= '1'; WE2 <= '0'; WE3 <= '0'; 
 
-                wait until rising_edge(SH2clock);
-                SH2DataBus <= (others => 'Z');
-                WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';
-            end loop;
+                -- next write, write low byte of same address
+                store_opcode_in_low_byte := '1';
+            else
+                -- Write bytes individually
+                wait until falling_edge(SH2clock);
+                SH2AddressBus <= std_logic_vector(to_unsigned(addr, 32)); 
+                SH2DataBus <= zeroes16 & opcode; 
+                WE0 <= '0'; WE1 <= '0'; WE2 <= '1'; WE3 <= '1'; 
+
+                -- written low byte so next instruction need to write high byte of new memory location
+                addr := addr + 1;
+                store_opcode_in_low_byte := '0';
+            end if;
+
+            -- Done writing, set writing idle
+            wait until rising_edge(SH2clock);
+            WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';
+
         end loop;
+
+        file_close(infile);
+        SH2DataBus <= (others => 'Z');         -- so that reading can access
 
         -------------------------------------------------------------------- READING
 

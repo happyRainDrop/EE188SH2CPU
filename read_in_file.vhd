@@ -1,3 +1,16 @@
+----------------------------------------------------------------------------
+--
+--  read_in_file.vhd
+--
+--  Reads in cpu_test_program.txt and simulates the programmed opcodes sequentially there. 
+--
+--  Entities instantiated:
+--      - CPUtoplevel
+--
+--  Revision History:
+--      7 May 25  Nerissa Finnen    Initial revision
+----------------------------------------------------------------------------
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_textio.all;
@@ -24,7 +37,7 @@ process
     variable addr : integer := 0;
 begin
     -- Open the input file
-    file_open(infile, "program.mem", READ_MODE);
+    file_open(infile, "cpu_test_program.txt", READ_MODE);
 
     while not endfile(infile) loop
         readline(infile, linebuf);

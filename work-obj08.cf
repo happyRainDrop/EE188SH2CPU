@@ -1,50 +1,50 @@
 v 4
-file . "CPU_Testbench.vhd" "95961fc03bc20de519de63a11a710f80a686bdbf" "20250510040506.701":
-  entity cpu_testbench at 1( 0) + 0 on 6580;
-  architecture behavior of cpu_testbench at 11( 182) + 0 on 6581;
-file . "SH2PMAU.vhd" "9c2ed275e64988bae84ef0a2bc9ff2a1048ca46e" "20250510040506.557":
-  package sh2pmauconstants at 19( 702) + 0 on 6573;
-  entity sh2pmau at 34( 1266) + 0 on 6574;
-  architecture behavioral of sh2pmau at 55( 2167) + 0 on 6575;
-file . "SH2alu.vhd" "fedb69edd3f35d20ea740466bbfe57f3038a6501" "20250510040506.460":
-  package sh2aluconstants at 25( 1125) + 0 on 6567;
-  entity sh2alu at 42( 1731) + 0 on 6568;
-  architecture behavioral of sh2alu at 64( 3007) + 0 on 6569;
-file . "memory.vhd" "fd52b3cd4c4fa464cca84028ba163cba122073c6" "20250510040506.309":
-  entity memory32x32 at 61( 2884) + 0 on 6562;
-  architecture behavioral of memory32x32 at 94( 4269) + 0 on 6563;
-file . "alu.vhd" "19a1cdf67dc47a88cd648ee2d6f6ac1962254be8" "20250510040506.020":
-  package aluconstants at 37( 1393) + 0 on 6545;
-  entity fblockbit at 112( 3719) + 0 on 6546;
-  architecture dataflow of fblockbit at 127( 4114) + 0 on 6547;
-  entity adderbit at 155( 4751) + 0 on 6548;
-  architecture dataflow of adderbit at 171( 5154) + 0 on 6549;
-  entity fblock at 216( 6230) + 0 on 6550;
-  architecture structural of fblock at 236( 6759) + 0 on 6551;
-  entity adder at 279( 7896) + 0 on 6552;
-  architecture structural of adder at 303( 8807) + 0 on 6553;
-  entity shifter at 363( 10821) + 0 on 6554;
-  architecture dataflow of shifter at 385( 11478) + 0 on 6555;
-  entity alu at 465( 14808) + 0 on 6556;
-  architecture structural of alu at 494( 16181) + 0 on 6557;
-file . "reg.vhd" "757d1e3924f1410098f993da3b2c1cbb51d2c595" "20250510040505.921":
-  entity regarray at 61( 2585) + 0 on 6543;
-  architecture behavioral of regarray at 97( 4037) + 0 on 6544;
-file . "mau.vhd" "883cc010f30f0c7c9072b3f80134251b8383e532" "20250510040506.221":
-  package memunitconstants at 32( 1278) + 0 on 6558;
-  package array_type_pkg at 58( 1927) + 0 on 6559;
-  entity memunit at 95( 3209) + 0 on 6560;
-  architecture dataflow of memunit at 124( 4228) + 0 on 6561;
-file . "SH2reg.vhd" "ff724ff3681142c151ca7f1dbed3d980b6f8b684" "20250510040506.418":
-  package sh2regconstants at 26( 1009) + 0 on 6564;
-  entity sh2regarray at 37( 1288) + 0 on 6565;
-  architecture behavioral of sh2regarray at 63( 2353) + 0 on 6566;
-file . "SH2DMAU.vhd" "019831a3fb19694039e2f6b1842a5877ecf5fa0e" "20250510040506.495":
-  package sh2dmauconstants at 19( 716) + 0 on 6570;
-  entity sh2dmau at 34( 1296) + 0 on 6571;
-  architecture behavioral of sh2dmau at 55( 2194) + 0 on 6572;
-file . "CPUtoplevel.vhd" "f6cdea8c64463cbb6c4ac97155d981ef0ddb982d" "20250510040506.618":
-  package sh2_cpu_constants at 29( 1195) + 0 on 6576;
-  package sh2_ir_constants at 76( 3332) + 0 on 6577;
-  entity cputoplevel at 227( 13129) + 0 on 6578;
-  architecture structural of cputoplevel at 261( 14792) + 0 on 6579;
+file . "CPUtoplevel.vhd" "f5dd51671d35e6e156c311e40e57597ca973ba17" "20250512073958.934":
+  package sh2_cpu_constants at 32( 1465) + 0 on 7154;
+  package sh2_ir_constants at 79( 3602) + 0 on 7155;
+  entity cputoplevel at 225( 15662) + 0 on 7156;
+  architecture structural of cputoplevel at 259( 17325) + 0 on 7157;
+file . "SH2DMAU.vhd" "019831a3fb19694039e2f6b1842a5877ecf5fa0e" "20250512073958.785":
+  package sh2dmauconstants at 19( 716) + 0 on 7148;
+  entity sh2dmau at 34( 1296) + 0 on 7149;
+  architecture behavioral of sh2dmau at 55( 2194) + 0 on 7150;
+file . "SH2reg.vhd" "ff724ff3681142c151ca7f1dbed3d980b6f8b684" "20250512073958.666":
+  package sh2regconstants at 26( 1009) + 0 on 7142;
+  entity sh2regarray at 37( 1288) + 0 on 7143;
+  architecture behavioral of sh2regarray at 63( 2353) + 0 on 7144;
+file . "mau.vhd" "883cc010f30f0c7c9072b3f80134251b8383e532" "20250512073958.429":
+  package memunitconstants at 32( 1278) + 0 on 7136;
+  package array_type_pkg at 58( 1927) + 0 on 7137;
+  entity memunit at 95( 3209) + 0 on 7138;
+  architecture dataflow of memunit at 124( 4228) + 0 on 7139;
+file . "reg.vhd" "757d1e3924f1410098f993da3b2c1cbb51d2c595" "20250512073958.107":
+  entity regarray at 61( 2585) + 0 on 7121;
+  architecture behavioral of regarray at 97( 4037) + 0 on 7122;
+file . "alu.vhd" "19a1cdf67dc47a88cd648ee2d6f6ac1962254be8" "20250512073958.194":
+  package aluconstants at 37( 1393) + 0 on 7123;
+  entity fblockbit at 112( 3719) + 0 on 7124;
+  architecture dataflow of fblockbit at 127( 4114) + 0 on 7125;
+  entity adderbit at 155( 4751) + 0 on 7126;
+  architecture dataflow of adderbit at 171( 5154) + 0 on 7127;
+  entity fblock at 216( 6230) + 0 on 7128;
+  architecture structural of fblock at 236( 6759) + 0 on 7129;
+  entity adder at 279( 7896) + 0 on 7130;
+  architecture structural of adder at 303( 8807) + 0 on 7131;
+  entity shifter at 363( 10821) + 0 on 7132;
+  architecture dataflow of shifter at 385( 11478) + 0 on 7133;
+  entity alu at 465( 14808) + 0 on 7134;
+  architecture structural of alu at 494( 16181) + 0 on 7135;
+file . "memory.vhd" "fd52b3cd4c4fa464cca84028ba163cba122073c6" "20250512073958.551":
+  entity memory32x32 at 61( 2884) + 0 on 7140;
+  architecture behavioral of memory32x32 at 94( 4269) + 0 on 7141;
+file . "SH2alu.vhd" "fedb69edd3f35d20ea740466bbfe57f3038a6501" "20250512073958.731":
+  package sh2aluconstants at 25( 1125) + 0 on 7145;
+  entity sh2alu at 42( 1731) + 0 on 7146;
+  architecture behavioral of sh2alu at 64( 3007) + 0 on 7147;
+file . "SH2PMAU.vhd" "9c2ed275e64988bae84ef0a2bc9ff2a1048ca46e" "20250512073958.873":
+  package sh2pmauconstants at 19( 702) + 0 on 7151;
+  entity sh2pmau at 34( 1266) + 0 on 7152;
+  architecture behavioral of sh2pmau at 55( 2167) + 0 on 7153;
+file . "CPU_Testbench.vhd" "dcf607fbc0ae9c5bcd122b324cad3292bfddbd77" "20250512073959.042":
+  entity cpu_testbench at 16( 569) + 0 on 7158;
+  architecture behavior of cpu_testbench at 26( 751) + 0 on 7159;
