@@ -25,7 +25,8 @@
 --      7 May 25  Ruth Berkun       Instantiate external memory
 --      7 May 25  Nerissa Finnen    Started read-in file functionality
 --      9 May 25  Nerissa Finnen    Updated IR constants. Started finite state machine functionality
---                                  and control signal settings.                              
+--                                  and control signal settings. 
+--     12 May 25  Ruth Berkun       Added over constants                             
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -34,21 +35,50 @@ use ieee.std_logic_1164.ALL;
 package SH2_CPU_Constants is
 
     -- Memory instantiation
-    constant memBlockWordSize : integer := 8;  -- 4 words in every memory block
+    constant memBlockWordSize : integer := 25;  -- 4 words in every memory block
 
     -- Register and word size configuration
     constant regLen       : integer := 32;   -- Each register is 32 bits
-    constant regCount     : integer := 21;   -- 16 general + 5 special registers
+    constant regCount     : integer := 18;   -- 16 general + 2 special registers (PR, SR)
 
     -- DMAU configuration
-    constant dmauSourceCount  : integer := 2;    -- from reg array (Register, GBR, PC) or immediate
+    constant dmauSourceCount  : integer := 4;    -- from reg array, GBR, VBR, or immediate
     constant dmauOffsetCount  : integer := 7;    -- 0, R0x1, R0x2, R0x4, Immx1, Immx2, Immx4
-    constant maxIncDecBitDMAU     : integer := 3;    -- Allow inc/dec up to bit 3 (+-4)
+    constant maxIncDecBitDMAU     : integer := 3;    -- Allow inc/dec up to bit 3 (+-4) 
+
+        -- DMAU source select
+    constant DMAU_SRC_SEL_GBR : integer := 0;
+    constant DMAU_SRC_SEL_VBR : integer := 1;
+    constant DMAU_SRC_SEL_REG : integer := 2;
+    constant DMAU_SRC_SEL_IMM : integer := 3;
+
+    -- DMAU offset select
+    constant DMAU_OFFSET_SEL_ZEROES : integer := 0;
+    constant DMAU_OFFSET_SEL_REG_OFFSET_x1 : integer := 1;
+    constant DMAU_OFFSET_SEL_REG_OFFSET_x2 : integer := 2;
+    constant DMAU_OFFSET_SEL_REG_OFFSET_x4 : integer := 3;
+    constant DMAU_OFFSET_SEL_IMM_OFFSET_x1 : integer := 4;
+    constant DMAU_OFFSET_SEL_IMM_OFFSET_x2 : integer := 5;
+    constant DMAU_OFFSET_SEL_IMM_OFFSET_x4 : integer := 6;
 
     -- PMAU configuration
-    constant pmauSourceCount  : integer := 2;    -- from reg array (PC) or immediate
+    constant pmauSourceCount  : integer := 3;    -- from reg array, PC, or immediate
     constant pmauOffsetCount  : integer := 7;    -- 0, R0x1, R0x2, R0x4, Immx1, Immx2, Immx4
     constant maxIncDecBitPMAU     : integer := 3;    -- Allow inc/dec up to bit 3 (+-4)
+
+    -- PMAU source select
+    constant PMAU_SRC_SEL_PC : integer := 0;
+    constant PMAU_SRC_SEL_REG : integer := 1;
+    constant PMAU_SRC_SEL_IMM : integer := 2;
+
+    -- PMAU offset select
+    constant PMAU_OFFSET_SEL_ZEROES : integer := 0;
+    constant PMAU_OFFSET_SEL_REG_OFFSET_x1 : integer := 1;
+    constant PMAU_OFFSET_SEL_REG_OFFSET_x2 : integer := 2;
+    constant PMAU_OFFSET_SEL_REG_OFFSET_x4 : integer := 3;
+    constant PMAU_OFFSET_SEL_IMM_OFFSET_x1 : integer := 4;
+    constant PMAU_OFFSET_SEL_IMM_OFFSET_x2 : integer := 5;
+    constant PMAU_OFFSET_SEL_IMM_OFFSET_x4 : integer := 6;
 
     -- Flag bit positions (useful for flag bus indexing)
     constant FLAG_INDEX_CARRYOUT     : integer := 4;
@@ -58,21 +88,20 @@ package SH2_CPU_Constants is
     constant FLAG_INDEX_SIGN         : integer := 0;
 
     -- Special register indices
-    constant REG_GBR           : integer := 16;
-    constant REG_VBR           : integer := 17;
-    constant REG_PR            : integer := 18;
-    constant REG_PC            : integer := 19;
-    constant REG_SR            : integer := 20;
+    constant REG_PR            : integer := 16;
+    constant REG_SR            : integer := 17;
 
     -- Choosing data and address bus indicies
-    constant NUM_DATA_BUS_OPTIONS : integer := 2; -- ALU, regs
-    constant NUM_ADDRESS_BUS_OPTIONS : integer := 2; -- DMAU, PMAU
-    constant HOLD_DATA_BUS : integer := 0;
-    constant SET_DATA_BUS_TO_REG_A_OUT : integer := 1;
-    constant SET_DATA_BUS_TO_ALU_OUT : integer := 2;
-    constant HOLD_ADDRESS_BUS : integer := 0;
-    constant SET_ADDRESS_BUS_TO_PMAU_OUT : integer := 1;
-    constant SET_ADDRESS_BUS_TO_DMAU_OUT : integer := 2;
+    constant NUM_DATA_BUS_OPTIONS : integer := 3; -- ALU, regs, hold, open
+    constant NUM_ADDRESS_BUS_OPTIONS : integer := 3; -- DMAU, PMAU, hold, open
+    constant OPEN_DATA_BUS : integer := 0;
+    constant HOLD_DATA_BUS : integer := 1;
+    constant SET_DATA_BUS_TO_REG_A_OUT : integer := 2;
+    constant SET_DATA_BUS_TO_ALU_OUT : integer := 3;
+    constant OPEN_ADDRESS_BUS : integer := 0;
+    constant HOLD_ADDRESS_BUS : integer := 1;
+    constant SET_ADDRESS_BUS_TO_PMAU_OUT : integer := 2;
+    constant SET_ADDRESS_BUS_TO_DMAU_OUT : integer := 3;
 
 end SH2_CPU_Constants;
 
@@ -320,8 +349,8 @@ architecture Structural of CPUtoplevel is
                                                                                             -- (Control unit uses to update PC) 
     ------------------------------------------------------------------------------------------
     -- CONTROL OUTPUTS
-    signal SH2SelDataBus    : integer range NUM_DATA_BUS_OPTIONS downto 0 := HOLD_DATA_BUS;     -- do not update, update with reg output, or update with ALU output
-    signal SH2SelAddressBus : integer range NUM_ADDRESS_BUS_OPTIONS downto 0 := HOLD_ADDRESS_BUS;  -- do not update, update with PMAU address out, or update with DMAU address out
+    signal SH2SelDataBus    : integer range NUM_DATA_BUS_OPTIONS downto 0 := OPEN_DATA_BUS;     -- do not update, update with reg output, or update with ALU output
+    signal SH2SelAddressBus : integer range NUM_ADDRESS_BUS_OPTIONS downto 0 := OPEN_ADDRESS_BUS;  -- do not update, update with PMAU address out, or update with DMAU address out
     ------------------------------------------------------------------------------------------
     -- Outputs of registers; get hooked up to ALU and PMAU and DMAU
     signal RegArrayOutA  : std_logic_vector(regLen - 1 downto 0) := (others => '0');
@@ -508,73 +537,12 @@ begin
             --END_OF_FILE
                 --Read enabled for RAM dumping
                 --Write remains disabled for RAM dumping
-        elsif falling_edge(SH2clock) then
-            case CurrentState is 
-                when ZERO_CLK =>
-                    RE0 <= '0';
-                    RE1 <= '0';
-                    RE2 <= '0';
-                    RE3 <= '0';
-
-                    WE0 <= '1';
-                    WE1 <= '1';
-                    WE2 <= '1';
-                    WE3 <= '1';
-
-                when FETCH_IR =>
-                    RE0 <= '0';
-                    RE1 <= '0';
-                    RE2 <= '0';
-                    RE3 <= '0';
-
-                    WE0 <= '1';
-                    WE1 <= '1';
-                    WE2 <= '1';
-                    WE3 <= '1';
-
-                when END_OF_FILE =>
-                    RE0 <= '0';
-                    RE1 <= '0';
-                    RE2 <= '0';
-                    RE3 <= '0';
-
-                    WE0 <= '1';
-                    WE1 <= '1';
-                    WE2 <= '1';
-                    WE3 <= '1';    
-
-                when others =>
-                    RE0 <= '1';
-                    RE1 <= '1';
-                    RE2 <= '1';
-                    RE3 <= '1';
-        
-                    WE0 <= '1';
-                    WE1 <= '1';
-                    WE2 <= '1';
-                    WE3 <= '1';
-                end case;
             end if;
     end process;
 
     --Update the CurrentState to the NextState every rising edge of the clock
     --Set Read and Write to inactive during the rising edge of the clock
-    process(SH2clock)
-    begin
-        if rising_edge(SH2clock) then 
-            CurrentState <= NextState;
-
-            RE0 <= '1';
-            RE1 <= '1';
-            RE2 <= '1';
-            RE3 <= '1';
-
-            WE0 <= '1';
-            WE1 <= '1';
-            WE2 <= '1';
-            WE3 <= '1';
-        end if;
-    end process;
+   
 
 --combinational if statements
 --Matches the 
@@ -647,10 +615,12 @@ begin
     -- Set buses
     SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
         RegArrayOutA when SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT else
-        SH2ALUResult;
+        SH2ALUResult when SH2SelDataBus = SET_DATA_BUS_TO_ALU_OUT else
+            (others => 'Z');
 
     SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
         SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
-        SH2ProgramAddressSrc;
+        SH2ProgramAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
+            (others => 'Z');
 
 end Structural;
