@@ -49,16 +49,17 @@ architecture behavior of CPU_Testbench is
     signal Reset          : std_logic := '1';
     signal NMI            : std_logic := '0';
     signal INT            : std_logic := '0';
-    signal tbRE0, tbRE1, tbRE2, tbRE3 : std_logic;
-    signal tbWE0, tbWE1, tbWE2, tbWE3 : std_logic;
-    signal cpuRE0, cpuRE1, cpuRE2, cpuRE3 : std_logic;
-    signal cpuWE0, cpuWE1, cpuWE2, cpuWE3 : std_logic;
+    signal memRE0, memRE1, memRE2, memRE3 : std_logic;
+    signal memWE0, memWE1, memWE2, memWE3 : std_logic;
     signal SH2clock       : std_logic := '0';
     signal SH2DataBus     : std_logic_vector(regLen - 1 downto 0);
     signal SH2AddressBus  : std_logic_vector(regLen - 1 downto 0);
 
-    -- Internal memory access (assumes internal memory is accessible)
-    signal RAMbits0, RAMbits1, RAMbits2, RAMbits3 : std_logic_vector(31 downto 0);
+    -- Interfacing to memory unit
+    signal cpuRE0, cpuRE1, cpuRE2, cpuRE3 : std_logic;
+    signal cpuWE0, cpuWE1, cpuWE2, cpuWE3 : std_logic;
+    signal tbRE0, tbRE1, tbRE2, tbRE3 : std_logic;
+    signal tbWE0, tbWE1, tbWE2, tbWE3 : std_logic;
 
     -- For input and output
     file infile : text open read_mode is "cpu_test_program.txt";
@@ -76,17 +77,28 @@ begin
         START_ADDR3 => (3 * memBlockWordSize)
     )
     port map (
-        RE0    => tbRE0,
-        RE1    => tbRE1,
-        RE2    => tbRE2,
-        RE3    => tbRE3, 
-        WE0    => tbWE0, 
-        WE1    => tbWE1, 
-        WE2    => tbWE2, 
-        WE3    => tbWE3, 
+        RE0    => memRE0,
+        RE1    => memRE1,
+        RE2    => memRE2,
+        RE3    => memRE3, 
+        WE0    => memWE0, 
+        WE1    => memWE1, 
+        WE2    => memWE2, 
+        WE3    => memWE3, 
         MemAB  => SH2AddressBus, 
         MemDB  => SH2DataBus 
     );
+
+    -- Memory control multiplexing
+    memRE0 <= tbRE0 when Reset = '0' else cpuRE0;
+    memRE1 <= tbRE1 when Reset = '0' else cpuRE1;
+    memRE2 <= tbRE2 when Reset = '0' else cpuRE2;
+    memRE3 <= tbRE3 when Reset = '0' else cpuRE3;
+
+    memWE0 <= tbWE0 when Reset = '0' else cpuWE0;
+    memWE1 <= tbWE1 when Reset = '0' else cpuWE1;
+    memWE2 <= tbWE2 when Reset = '0' else cpuWE2;
+    memWE3 <= tbWE3 when Reset = '0' else cpuWE3;
 
     -- Clock process
     clk_proc: process
@@ -103,14 +115,14 @@ begin
             Reset          => Reset,
             NMI            => NMI,
             INT            => INT,
-            RE0            => tbRE0,
-            RE1            => tbRE1,
-            RE2            => tbRE2,
-            RE3            => tbRE3,
-            WE0            => tbWE0,
-            WE1            => tbWE1,
-            WE2            => tbWE2,
-            WE3            => tbWE3,
+            RE0            => cpuRE0,
+            RE1            => cpuRE1,
+            RE2            => cpuRE2,
+            RE3            => cpuRE3,
+            WE0            => cpuWE0,
+            WE1            => cpuWE1,
+            WE2            => cpuWE2,
+            WE3            => cpuWE3,
             SH2clock       => SH2clock,
             SH2DataBus     => SH2DataBus,
             SH2AddressBus  => SH2AddressBus
@@ -187,12 +199,12 @@ begin
 
         -------------------------------------------------------------------- TURN ON CPU AND THE OFF
         report "Ready for CPU to access memory.";
+        Reset <= '1';
+        wait for 100 ns;
         Reset <= '0';
-        wait for 500 ns;
-        Reset <= '0';
+        report "CPU DONE!!";
         -------------------------------------------------------------------- READING
 
-        report "CPU DONE!!";
         -- Read all memory contents
         write(L, string'("Memory Dump by Block (32 words each):")); 
         writeline(mem_dump, L);
