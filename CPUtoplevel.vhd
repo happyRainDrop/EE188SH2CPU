@@ -453,23 +453,6 @@ begin
             SH2ProgramAddressSrc => SH2ProgramAddressSrc
         );    
     
-    
-    resetCPU: process(Reset)
-    begin
-        if (Reset = '0') then
-
-            -- Set data, address buses to high impedance so that test bench can write them
-            SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-            SH2SelDataBus <= OPEN_DATA_BUS;
-            SH2DataBus <= (others => 'Z');
-            SH2AddressBus <= (others => 'Z');
-
-            -- Reset PC
-            -- later problem!
-
-        end if;
-    end process resetCPU;
-    
     updatePCandIRandSetNextState: process(SH2clock)
     begin
         --On the rising edge of the CurrentState
@@ -492,7 +475,9 @@ begin
             case CurrentState is 
                 when ZERO_CLK =>
 
-                    report "reset = " & std_logic'image(reset);
+                    -- Set data, address buses to high impedance so that test bench can write them
+                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                    SH2SelDataBus <= OPEN_DATA_BUS;
 
                     ------------------------------------------------ Setting control signals
                     --Setting PMAU control signals
@@ -517,6 +502,11 @@ begin
                     ------------------------------------------------ Setting control signals
                     --Set clock counter back to 1
                     ClockCounter            <= "00000000000000000000000000000001";
+
+                    --
+                    -- Set data, address buses to high impedance so that test bench can write them
+                    SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                    SH2SelDataBus <= OPEN_DATA_BUS;
                     
                     --Setting PMAU control signals
                     SH2PMAUSrcSel           <= 0;
@@ -561,6 +551,10 @@ begin
                     --Do nothing
                     InstructionReg          <= NOP;
             end case;
+
+            if (Reset = '0') then 
+                CurrentState <= ZERO_CLK;   -- We are resetting
+            end if;
         end if;
         --On the falling edge of the CurrentState
         --Update Read and Write for correct RAM interaction based on state

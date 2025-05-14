@@ -49,8 +49,10 @@ architecture behavior of CPU_Testbench is
     signal Reset          : std_logic := '1';
     signal NMI            : std_logic := '0';
     signal INT            : std_logic := '0';
-    signal RE0, RE1, RE2, RE3 : std_logic;
-    signal WE0, WE1, WE2, WE3 : std_logic;
+    signal tbRE0, tbRE1, tbRE2, tbRE3 : std_logic;
+    signal tbWE0, tbWE1, tbWE2, tbWE3 : std_logic;
+    signal cpuRE0, cpuRE1, cpuRE2, cpuRE3 : std_logic;
+    signal cpuWE0, cpuWE1, cpuWE2, cpuWE3 : std_logic;
     signal SH2clock       : std_logic := '0';
     signal SH2DataBus     : std_logic_vector(regLen - 1 downto 0);
     signal SH2AddressBus  : std_logic_vector(regLen - 1 downto 0);
@@ -74,14 +76,14 @@ begin
         START_ADDR3 => (3 * memBlockWordSize)
     )
     port map (
-        RE0    => RE0,
-        RE1    => RE1,
-        RE2    => RE2,
-        RE3    => RE3, 
-        WE0    => WE0, 
-        WE1    => WE1, 
-        WE2    => WE2, 
-        WE3    => WE3, 
+        RE0    => tbRE0,
+        RE1    => tbRE1,
+        RE2    => tbRE2,
+        RE3    => tbRE3, 
+        WE0    => tbWE0, 
+        WE1    => tbWE1, 
+        WE2    => tbWE2, 
+        WE3    => tbWE3, 
         MemAB  => SH2AddressBus, 
         MemDB  => SH2DataBus 
     );
@@ -101,14 +103,14 @@ begin
             Reset          => Reset,
             NMI            => NMI,
             INT            => INT,
-            RE0            => RE0,
-            RE1            => RE1,
-            RE2            => RE2,
-            RE3            => RE3,
-            WE0            => WE0,
-            WE1            => WE1,
-            WE2            => WE2,
-            WE3            => WE3,
+            RE0            => tbRE0,
+            RE1            => tbRE1,
+            RE2            => tbRE2,
+            RE3            => tbRE3,
+            WE0            => tbWE0,
+            WE1            => tbWE1,
+            WE2            => tbWE2,
+            WE3            => tbWE3,
             SH2clock       => SH2clock,
             SH2DataBus     => SH2DataBus,
             SH2AddressBus  => SH2AddressBus
@@ -128,16 +130,16 @@ begin
         Reset <= '0';
 
         -- Start with: read off
-        RE0 <= '1';
-        RE1 <= '1';
-        RE2 <= '1';
-        RE3 <= '1';
+        tbRE0 <= '1';
+        tbRE1 <= '1';
+        tbRE2 <= '1';
+        tbRE3 <= '1';
 
         -- Start with: write off
-        RE0 <= '1';
-        RE1 <= '1';
-        RE2 <= '1';
-        RE3 <= '1';
+        tbWE0 <= '1';
+        tbWE1 <= '1';
+        tbWE2 <= '1';
+        tbWE3 <= '1';
 
         -------------------------------------------------------------------- WRITING
 
@@ -150,14 +152,12 @@ begin
             readline(infile, L);
             read(L, opcode);
 
-            report "addr = " & integer'image(addr);
-
             if (store_opcode_in_low_byte = '0') then
                 -- Write bytes individually
                 wait until falling_edge(SH2clock);
                 SH2AddressBus <= std_logic_vector(to_unsigned(addr, 32)); 
                 SH2DataBus <= opcode & zeroes16; 
-                WE0 <= '1'; WE1 <= '1'; WE2 <= '0'; WE3 <= '0'; 
+                tbWE0 <= '1'; tbWE1 <= '1'; tbWE2 <= '0'; tbWE3 <= '0'; 
 
                 -- next write, write low byte of same address
                 store_opcode_in_low_byte := '1';
@@ -166,7 +166,7 @@ begin
                 wait until falling_edge(SH2clock);
                 SH2AddressBus <= std_logic_vector(to_unsigned(addr, 32)); 
                 SH2DataBus <= zeroes16 & opcode; 
-                WE0 <= '0'; WE1 <= '0'; WE2 <= '1'; WE3 <= '1'; 
+                tbWE0 <= '0'; tbWE1 <= '0'; tbWE2 <= '1'; tbWE3 <= '1'; 
 
                 -- written low byte so next instruction need to write high byte of new memory location
                 addr := addr + 1;
@@ -175,7 +175,9 @@ begin
 
             -- Done writing, set writing idle
             wait until rising_edge(SH2clock);
-            WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';
+            tbWE0 <= '1'; tbWE1 <= '1'; tbWE2 <= '1'; tbWE3 <= '1';
+            report "addr = " & to_hstring(SH2AddressBus);
+            report "val = " & to_hstring(SH2DataBus);
 
         end loop;
 
@@ -185,7 +187,7 @@ begin
 
         -------------------------------------------------------------------- TURN ON CPU AND THE OFF
         report "Ready for CPU to access memory.";
-        Reset <= '1';
+        Reset <= '0';
         wait for 500 ns;
         Reset <= '0';
         -------------------------------------------------------------------- READING
@@ -204,10 +206,12 @@ begin
 
                 wait until falling_edge(SH2clock);
                 SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
-                RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0'; 
+                tbRE0 <= '0'; tbRE1 <= '0'; tbRE2 <= '0'; tbRE3 <= '0'; 
 
                 wait until rising_edge(SH2clock);
-                RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1';
+                tbRE0 <= '1'; tbRE1 <= '1'; tbRE2 <= '1'; tbRE3 <= '1';
+                report "addr = " & to_hstring(SH2AddressBus);
+                report "val = " & to_hstring(SH2DataBus);
 
                 write(L, string'("Addr "));
                 write(L, i);
