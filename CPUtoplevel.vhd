@@ -30,7 +30,8 @@
 --     12 May 25  Nerissa Finnen    Finished finite state machine initial implementation, added 5 instructions    
 --     12 May 25  Ruth Berkun       State machine adjustments, start process IR logic 
 --                                  Add Enable signal: allow CPU and testbench to tell each other when they are reading/writing  
---     13 May 25  Ruth Berkun       Remove Enable signal, move memory out of CPU (oops why did we put it here)             
+--     13 May 25  Ruth Berkun       Remove Enable signal, move memory out of CPU (oops why did we put it here)            
+--     13 May 25  Nerissa Finnen    Added constant to hold and update the PMAU and DMAU properly 
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -107,6 +108,30 @@ package SH2_CPU_Constants is
     constant HOLD_ADDRESS_BUS : integer := 1;
     constant SET_ADDRESS_BUS_TO_PMAU_OUT : integer := 2;
     constant SET_ADDRESS_BUS_TO_DMAU_OUT : integer := 3;
+
+    -- Holding settings for DMAU and PMAU; ensures that the register 
+    -- is held at current value by decrementing by 1 and adding 1 as offset
+    constant PMAU_RESET         : std_logic := '0';     --Resets the PC value in the PMAU
+    constant PMAU_NO_RESET         : std_logic := '1';     --Resets the PC value in the PMAU
+    constant DEFAULT_SRC_SEL    : integer := 0;         --May change due to PC/GBR location moving
+    constant DEFAULT_DEC_SEL    : std_logic := '1';     --Select decrement
+    constant DEFAULT_DEC_BIT    : integer := 0;         --Only 0th bit to modify
+    constant DEFAULT_POST_SEL   : std_logic := '1';     --Post decrement and preserve the initial value
+    constant DEFAULT_OFFSET_SEL : integer := 4;         --Select immediate offset multiplied by 1
+    constant DEFAULT_OFFSET_VAL : std_logic_vector(31 downto 0)  "00000000000000000000000000000001";    --Set the offset to be 1
+
+    -- Incrementing in PMAU
+    constant DEFAULT_PRE_SEL    : std_logic := '1';
+    constant DEFAULT_INC_SEL    : std_logic := 0';
+    constant DEFAULT_NO_OFF_VAL : integer := 0;
+
+    -- Incrementing in DMAU
+
+    -- PC clock increments
+    constant ONE_CLOCK      : std_logic_vector(31 downto 0) := "00000000000000000000000000000001";
+    constant TWO_CLOCK      : std_logic_vector(31 downto 0) := "00000000000000000000000000000010";
+    constant THREE_CLOCK    : std_logic_vector(31 downto 0) := "00000000000000000000000000000011";
+    constant FOUR_CLOCK     : std_logic_vector(31 downto 0) := "00000000000000000000000000000100";
 
 end SH2_CPU_Constants;
 
@@ -324,6 +349,7 @@ architecture Structural of CPUtoplevel is
     signal FlagBus        : std_logic_vector(4 downto 0) := (others => '0');                     -- Flags are Cout, HalfCout, Overflow, Zero, Sign
     ------------------------------------------------------------------------------------------------------------------
     -- DMAU FROM CONTROL LINE INPUTS
+    signal SH2DMAUReset      : std_logic := '0';
     signal SH2DMAUSrcSel     : integer  range dmauSourceCount - 1 downto 0 := 0;
     signal SH2DMAUOffsetSel  : integer  range dmauOffsetCount - 1 downto 0 := 0;
     signal SH2DMAUIncDecSel  : std_logic := '0';
@@ -339,6 +365,7 @@ architecture Structural of CPUtoplevel is
                                                                                         -- (Need control line to see which src)
     -------------------------------------------------------------------------------------
     -- PMAU FROM CONTROL LINE INPUTS
+    signal SH2PMAUReset      : std_logic := '0';
     signal SH2PMAUSrcSel     : integer  range pmauSourceCount - 1 downto 0 := 0;
     signal SH2PMAUOffsetSel  : integer  range pmauOffsetCount - 1 downto 0 := 0;
     signal SH2PMAUIncDecSel  : std_logic := '0';
@@ -424,6 +451,7 @@ begin
     -- Instantiate DMAU
     SH2DMAU : entity  work.SH2DMAU
         port map(
+  --          SH2DMAUReset => SH2DMAUReset,
             SH2DMAURegSource => RegArrayOutA, 
             SH2DMAUImmediateSource => DMAUImmediateSource, 
             SH2DMAURegOffset => RegArrayOutB, 
@@ -440,6 +468,7 @@ begin
     -- Instantiate PMAU
     SH2PMAU : entity  work.SH2PMAU
         port map(
+            SH2PMAUReset => SH2PMAUReset,
             SH2PMAURegSource => RegArrayOutA, 
             SH2PMAUImmediateSource => PMAUImmediateSource, 
             SH2PMAURegOffset => RegArrayOutB, 
@@ -450,8 +479,7 @@ begin
             SH2PMAUIncDecBit  => SH2PMAUIncDecBit, 
             SH2PMAUPrePostSel => SH2PMAUPrePostSel, 
             SH2ProgramAddressBus => RegArrayOutA,        --make the PC come out into here
-            SH2ProgramAddressSrc => SH2ProgramAddressSrc
-        );    
+            SH2ProgramAddressSrc => SH2ProgramAddressSrc        );    
     
     updatePCandIRandSetNextState: process(SH2clock)
     begin
@@ -481,14 +509,13 @@ begin
 
                     ------------------------------------------------ Setting control signals
                     --Setting PMAU control signals
-
-                    --Do I need to set offset/immediate?
-                    --Will need to for multi-clock
-                    SH2PMAUSrcSel           <= 0;
-                    SH2PMAUOffsetSel        <= 0;
-                    SH2PMAUIncDecSel        <= '0';
-                    SH2PMAUIncDecBit        <= 0;
-                    SH2PMAUPrePostSel       <= '0';
+                    SH2PMAUReset            <= PMAU_RESET;
+                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
+                    PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
+                    SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
+                    SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
+                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
+                    SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
 
                     ------------------------------------------------ Update state
                     if (Reset = '1') then           -- Reset is active low, so '1' means we're not reset
@@ -501,7 +528,7 @@ begin
 
                     ------------------------------------------------ Setting control signals
                     --Set clock counter back to 1
-                    ClockCounter            <= "00000000000000000000000000000001";
+                    ClockCounter            <= ONE_CLOCK;
 
                     --
                     -- Set data, address buses to high impedance so that test bench can write them
@@ -509,13 +536,14 @@ begin
                     SH2SelDataBus <= OPEN_DATA_BUS;
                     
                     --Setting PMAU control signals
-                    SH2PMAUSrcSel           <= 0;
+                    SH2PMAUReset            <= PMAU_NO_RESET;
+                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
                     -- PMAUImmediateSource  <= ClockCounter;
                     -- FIX ME
-                    SH2PMAUOffsetSel        <= 0;
-                    SH2PMAUIncDecSel        <= '1';
-                    SH2PMAUIncDecBit        <= 0;
-                    SH2PMAUPrePostSel       <= '0';
+                    SH2PMAUOffsetSel        <= DEFAULT_NO_OFF_VAL;
+                    SH2PMAUIncDecSel        <= DEFAULT_INC_SEL;
+                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
+                    SH2PMAUPrePostSel       <= DEFAULT_PRE_SEL;
 
                     ------------------------------------------------ Set next state
                     if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
@@ -528,11 +556,13 @@ begin
                     
                     -------------------------------------------------- Setting control signals
                     --Setting PMAU control signals
-                    SH2PMAUSrcSel           <= 0;
-                    SH2PMAUOffsetSel        <= 0;
-                    SH2PMAUIncDecSel        <= '0';
-                    SH2PMAUIncDecBit        <= 0;
-                    SH2PMAUPrePostSel       <= '0';
+                    SH2PMAUReset            <= PMAU_RESET;
+                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
+                    PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
+                    SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
+                    SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
+                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
+                    SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
                     SH2SelDataBus <= OPEN_DATA_BUS;         -- no writing to buses when end of file!
                     SH2SelAddressBus <= OPEN_ADDRESS_BUS;
 
@@ -542,11 +572,13 @@ begin
                 when others =>
                     --Should not get here
                     --But if it does, do not update the PC
-                    SH2PMAUSrcSel           <= 0;
-                    SH2PMAUOffsetSel        <= 0;
-                    SH2PMAUIncDecSel        <= '0';
-                    SH2PMAUIncDecBit        <= 0;
-                    SH2PMAUPrePostSel       <= '0';
+                    SH2PMAUReset            <= PMAU_RESET;
+                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
+                    PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
+                    SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
+                    SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
+                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
+                    SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
 
                     --Do nothing
                     InstructionReg          <= NOP;
