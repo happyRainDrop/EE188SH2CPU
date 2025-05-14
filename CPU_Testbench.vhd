@@ -12,6 +12,7 @@
 --      9 May 25  Ruth Berkun       Test all of memory is filled completed (with each of the 4 blocks having 8 32-bit words)
 --      12 May 25  Ruth Berkun      Modify reading portion to come from text file
 --      12 May 25  Ruth Berkun      Add Enable signal
+--      13 May 25  Ruth Berkun      Remove Enable signal, put memory instantiation here
 ----------------------------------------------------------------------------
 
 library ieee;
@@ -34,7 +35,6 @@ architecture behavior of CPU_Testbench is
     component CPUtoplevel
         port(
             Reset          : in  std_logic;
-            Enable         : inout std_logic;
             NMI            : in  std_logic;
             INT            : in  std_logic;
             RE0, RE1, RE2, RE3 : out std_logic;
@@ -47,7 +47,6 @@ architecture behavior of CPU_Testbench is
 
     -- DUT signals
     signal Reset          : std_logic := '1';
-    signal Enable          : std_logic := '0';
     signal NMI            : std_logic := '0';
     signal INT            : std_logic := '0';
     signal RE0, RE1, RE2, RE3 : std_logic;
@@ -65,6 +64,28 @@ architecture behavior of CPU_Testbench is
 
 begin
 
+    -- Instantiate memory
+    SH2ExternalMemory : entity work.MEMORY32x32
+    generic map (
+        MEMSIZE     => memBlockWordSize,
+        START_ADDR0 => (0 * memBlockWordSize),
+        START_ADDR1 => (1 * memBlockWordSize),
+        START_ADDR2 => (2 * memBlockWordSize),
+        START_ADDR3 => (3 * memBlockWordSize)
+    )
+    port map (
+        RE0    => RE0,
+        RE1    => RE1,
+        RE2    => RE2,
+        RE3    => RE3, 
+        WE0    => WE0, 
+        WE1    => WE1, 
+        WE2    => WE2, 
+        WE3    => WE3, 
+        MemAB  => SH2AddressBus, 
+        MemDB  => SH2DataBus 
+    );
+
     -- Clock process
     clk_proc: process
     begin
@@ -78,7 +99,6 @@ begin
     DUT: CPUtoplevel
         port map (
             Reset          => Reset,
-            Enable         => Enable,
             NMI            => NMI,
             INT            => INT,
             RE0            => RE0,
@@ -104,12 +124,8 @@ begin
 
         ------------------------------------------------------------------- INIT
 
-        Enable <= '0';
-
-        -- Reset (active low)
+        -- Reset (active low): Reset so that CPU cannot touch memory
         Reset <= '0';
-        wait for 20 ns;
-        Reset <= '1';
 
         -- Start with: read off
         RE0 <= '1';
@@ -167,12 +183,12 @@ begin
         SH2DataBus <= (others => 'Z');         -- so that reading can access
         SH2AddressBus <= (others => 'Z');         -- so that reading can access
 
-        Enable <= '1';   -- let CPU do its thing
+        -------------------------------------------------------------------- TURN ON CPU AND THE OFF
         report "Ready for CPU to access memory.";
-
+        Reset <= '1';
+        wait for 500 ns;
+        Reset <= '0';
         -------------------------------------------------------------------- READING
-
-        wait for 100 ns;
 
         report "CPU DONE!!";
         -- Read all memory contents

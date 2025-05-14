@@ -29,7 +29,8 @@
 --     12 May 25  Ruth Berkun       Added over constants       
 --     12 May 25  Nerissa Finnen    Finished finite state machine initial implementation, added 5 instructions    
 --     12 May 25  Ruth Berkun       State machine adjustments, start process IR logic 
---                                  Add Enable signal: allow CPU and testbench to tell each other when they are reading/writing               
+--                                  Add Enable signal: allow CPU and testbench to tell each other when they are reading/writing  
+--     13 May 25  Ruth Berkun       Remove Enable signal, move memory out of CPU (oops why did we put it here)             
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -268,7 +269,6 @@ entity CPUtoplevel is
     port(
         
         Reset   :  in     std_logic;                       -- reset signal (active low)
-        Enable  :  inout  std_logic;                       -- high when CPU can read/write, low when testbench reads/writes
 
         NMI     :  in     std_logic;                       -- non-maskable interrupt signal (falling edge)
         INT     :  in     std_logic;                       -- maskable interrupt signal (active low)
@@ -376,36 +376,13 @@ architecture Structural of CPUtoplevel is
     signal CurrentState     : states;
     signal NextState      : states; --ughghghhggh
 
-    signal InstructionReg   : std_logic_vector(15 downto 0); -- IR
-    signal ClockCounter     : std_logic_vector(31 downto 0); -- what clock cycle are we on?
+    signal InstructionReg   : std_logic_vector(instrLen - 1 downto 0); -- IR
+    signal ClockCounter     : std_logic_vector(regLen - 1 downto 0); -- what clock cycle are we on?
     signal store_opcode_in_low_byte : std_logic := '0';  -- store in high byte then low byte
 
-    
-
+    constant REG_LEN_ZEROS : std_logic_vector(regLen-1 downto 0) := (others => '0');
 
 begin
-
-
-    SH2ExternalMemory : entity work.MEMORY32x32
-        generic map (
-            MEMSIZE     => memBlockWordSize,
-            START_ADDR0 => (0 * memBlockWordSize),
-            START_ADDR1 => (1 * memBlockWordSize),
-            START_ADDR2 => (2 * memBlockWordSize),
-            START_ADDR3 => (3 * memBlockWordSize)
-        )
-        port map (
-            RE0    => RE0,
-            RE1    => RE1,
-            RE2    => RE2,
-            RE3    => RE3, 
-            WE0    => WE0, 
-            WE1    => WE1, 
-            WE2    => WE2, 
-            WE3    => WE3, 
-            MemAB  => SH2AddressBus, 
-            MemDB  => SH2DataBus 
-        );
 
     -- Instantiate register array
     SH2RegArray : entity work.SH2RegArray
@@ -476,6 +453,23 @@ begin
             SH2ProgramAddressSrc => SH2ProgramAddressSrc
         );    
     
+    
+    resetCPU: process(Reset)
+    begin
+        if (Reset = '0') then
+
+            -- Set data, address buses to high impedance so that test bench can write them
+            SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+            SH2SelDataBus <= OPEN_DATA_BUS;
+            SH2DataBus <= (others => 'Z');
+            SH2AddressBus <= (others => 'Z');
+
+            -- Reset PC
+            -- later problem!
+
+        end if;
+    end process resetCPU;
+    
     updatePCandIRandSetNextState: process(SH2clock)
     begin
         --On the rising edge of the CurrentState
@@ -494,10 +488,11 @@ begin
             WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
             RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; 
 
+            -- Update state on rising edge
             case CurrentState is 
                 when ZERO_CLK =>
 
-                    report "enable = " & std_logic'image(Enable);
+                    report "reset = " & std_logic'image(reset);
 
                     ------------------------------------------------ Setting control signals
                     --Setting PMAU control signals
@@ -511,10 +506,10 @@ begin
                     SH2PMAUPrePostSel       <= '0';
 
                     ------------------------------------------------ Update state
-                    if (Enable = '1') then
+                    if (Reset = '1') then           -- Reset is active low, so '1' means we're not reset
                         CurrentState <= FETCH_IR;
                     else 
-                        CurrentState <= ZERO_CLK;
+                        CurrentState <= ZERO_CLK;   -- We are resetting
                     end if;
 
                 when FETCH_IR =>
@@ -526,6 +521,7 @@ begin
                     --Setting PMAU control signals
                     SH2PMAUSrcSel           <= 0;
                     -- PMAUImmediateSource  <= ClockCounter;
+                    -- FIX ME
                     SH2PMAUOffsetSel        <= 0;
                     SH2PMAUIncDecSel        <= '1';
                     SH2PMAUIncDecBit        <= 0;
@@ -552,7 +548,6 @@ begin
 
                     -------------------------------------------------- Update state
                     CurrentState <= END_OF_FILE;
-                    -- Enable <= '0';    -- let testbench know it can dump RAM
 
                 when others =>
                     --Should not get here
@@ -584,7 +579,7 @@ begin
 
                     ------------------------------------------------ Load in first instruction
                     --Fetching first instruction (high bytes of DataBus)
-                    if (Enable = '1') then
+                    if (Reset = '1') then
                         WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- not writing only read high bytes
                         RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0';
                         InstructionReg          <= SH2DataBus(regLen-1 downto instrLen);
