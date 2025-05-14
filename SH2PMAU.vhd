@@ -53,6 +53,7 @@ use ieee.std_logic_1164.all;
 
 entity  SH2PMAU  is
     port(
+        SH2PMAUReset : in std_logic;    -- active low: 0 to reset
         SH2PMAURegSource :  in std_logic_vector(regLen-1 downto 0);
         SH2PMAUImmediateSource :  in std_logic_vector(regLen-1 downto 0);
         SH2PMAURegOffset :  in std_logic_vector(regLen-1 downto 0);
@@ -62,8 +63,7 @@ entity  SH2PMAU  is
         SH2PMAUIncDecSel  : in      std_logic;
         SH2PMAUIncDecBit  : in      integer  range maxIncDecBitPMAU downto 0;
         SH2PMAUPrePostSel : in      std_logic;
-        SH2ProgramAddressBus : out     std_logic_vector(regLen - 1 downto 0);
-        SH2ProgramAddressSrc : buffer  std_logic_vector(regLen - 1 downto 0)
+        SH2ProgramAddressBus : out     std_logic_vector(regLen - 1 downto 0)
     );
 
 end  SH2PMAU;
@@ -102,6 +102,9 @@ architecture  behavioral  of  SH2PMAU  is
     signal SH2PMAUAddrSrc : std_logic_array(pmauSourceCount - 1 downto 0)(regLen - 1 downto 0);
     signal SH2PMAUAddrOff :std_logic_array(pmauOffsetCount - 1 downto 0)(regLen - 1 downto 0);
 
+    -- Intermediates
+    signal genericMAUProgramAddressBus : std_logic_vector(regLen-1 downto 0) := (others => '0');
+
 begin
 
     -- PMAU: Prepare inputs
@@ -137,8 +140,11 @@ begin
             IncDecBit  => SH2PMAUIncDecBit,
             PrePostSel => SH2PMAUPrePostSel,
 
-            Address => SH2ProgramAddressBus,
-            AddrSrcOut => SH2ProgramAddressSrc -- PC
+            Address => genericMAUProgramAddressBus,
+            AddrSrcOut => open -- PC
         );
+
+        SH2PC <= genericMAUProgramAddressBus when (SH2PMAUReset = '1') else  (others => '0'); -- reset
+        SH2ProgramAddressBus <= SH2PC; -- output of PMAU is the PC address
 
 end  behavioral;

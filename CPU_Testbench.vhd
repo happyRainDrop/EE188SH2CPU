@@ -196,11 +196,12 @@ begin
         file_close(infile);
         SH2DataBus <= (others => 'Z');         -- so that reading can access
         SH2AddressBus <= (others => 'Z');         -- so that reading can access
+        wait for 10 ns;
 
         -------------------------------------------------------------------- TURN ON CPU AND THE OFF
         report "Ready for CPU to access memory.";
         Reset <= '1';
-        wait for 100 ns;
+        wait for 1000 ns;
         Reset <= '0';
         report "CPU DONE!!";
         -------------------------------------------------------------------- READING

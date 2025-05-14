@@ -118,11 +118,11 @@ package SH2_CPU_Constants is
     constant DEFAULT_DEC_BIT    : integer := 0;         --Only 0th bit to modify
     constant DEFAULT_POST_SEL   : std_logic := '1';     --Post decrement and preserve the initial value
     constant DEFAULT_OFFSET_SEL : integer := 4;         --Select immediate offset multiplied by 1
-    constant DEFAULT_OFFSET_VAL : std_logic_vector(31 downto 0)  "00000000000000000000000000000001";    --Set the offset to be 1
+    constant DEFAULT_OFFSET_VAL : std_logic_vector(31 downto 0) := "00000000000000000000000000000001";    --Set the offset to be 1
 
     -- Incrementing in PMAU
     constant DEFAULT_PRE_SEL    : std_logic := '1';
-    constant DEFAULT_INC_SEL    : std_logic := 0';
+    constant DEFAULT_INC_SEL    : std_logic := '0';
     constant DEFAULT_NO_OFF_VAL : integer := 0;
 
     -- Incrementing in DMAU
@@ -378,8 +378,6 @@ architecture Structural of CPUtoplevel is
     -- PMAU OUTPUTS
     signal SH2ProgramAddressBus : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- PMAU input address, updated
                                                                                             -- (Control unit uses to update PC)
-    signal SH2ProgramAddressSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- PMAU input address, updated
-                                                                                            -- (Control unit uses to update PC) 
     ------------------------------------------------------------------------------------------
     
     -- Outputs
@@ -393,6 +391,8 @@ architecture Structural of CPUtoplevel is
     signal RegArrayOutB  : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     signal RegArrayOutA1 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+
+    signal SH2PC : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     ------------------------------------------------------------------------------------------
 
     -- Signals and states
@@ -408,6 +408,7 @@ architecture Structural of CPUtoplevel is
     signal store_opcode_in_low_byte : std_logic := '0';  -- store in high byte then low byte
 
     constant REG_LEN_ZEROS : std_logic_vector(regLen-1 downto 0) := (others => '0');
+    constant INSTR_LEN_ZEROS : std_logic_vector(instrLen-1 downto 0) := (others => '0');
 
 begin
 
@@ -478,8 +479,8 @@ begin
             SH2PMAUIncDecSel  => SH2PMAUIncDecSel, 
             SH2PMAUIncDecBit  => SH2PMAUIncDecBit, 
             SH2PMAUPrePostSel => SH2PMAUPrePostSel, 
-            SH2ProgramAddressBus => RegArrayOutA,        --make the PC come out into here
-            SH2ProgramAddressSrc => SH2ProgramAddressSrc        );    
+            SH2ProgramAddressBus => SH2PC        --make the PC come out into here
+            );    
     
     updatePCandIRandSetNextState: process(SH2clock)
     begin
@@ -502,11 +503,6 @@ begin
             -- Update state on rising edge
             case CurrentState is 
                 when ZERO_CLK =>
-
-                    -- Set data, address buses to high impedance so that test bench can write them
-                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                    SH2SelDataBus <= OPEN_DATA_BUS;
-
                     ------------------------------------------------ Setting control signals
                     --Setting PMAU control signals
                     SH2PMAUReset            <= PMAU_RESET;
@@ -520,8 +516,14 @@ begin
                     ------------------------------------------------ Update state
                     if (Reset = '1') then           -- Reset is active low, so '1' means we're not reset
                         CurrentState <= FETCH_IR;
+                        SH2SelAddressBus <= OPEN_ADDRESS_BUS; -- 
+                        SH2SelDataBus <= OPEN_DATA_BUS;
+                        
                     else 
                         CurrentState <= ZERO_CLK;   -- We are resetting
+                        -- Set data, address buses to high impedance so that test bench can write them
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
                     end if;
 
                 when FETCH_IR =>
@@ -550,6 +552,8 @@ begin
                         CurrentState <= END_OF_FILE;
                     else 
                         CurrentState <= FETCH_IR;
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                        SH2SelDataBus <= HOLD_DATA_BUS;
                     end if;
 
                 when END_OF_FILE =>
@@ -587,6 +591,10 @@ begin
             if (Reset = '0') then 
                 CurrentState <= ZERO_CLK;   -- We are resetting
             end if;
+
+            report "IR = " & to_hstring(SH2DataBus);
+            report "AddressBus = " & to_hstring(SH2AddressBus);
+            report "PC = " & to_hstring(SH2PC);
         end if;
         --On the falling edge of the CurrentState
         --Update Read and Write for correct RAM interaction based on state
@@ -606,23 +614,31 @@ begin
                     ------------------------------------------------ Load in first instruction
                     --Fetching first instruction (high bytes of DataBus)
                     if (Reset = '1') then
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
                         WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- not writing only read high bytes
                         RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0';
-                        InstructionReg          <= SH2DataBus(regLen-1 downto instrLen);
+                        InstructionReg          <= SH2DataBus(regLen-1 downto instrLen) or INSTR_LEN_ZEROS;
                     else 
+                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
                         WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- no reading or writing
                         RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1';
-                        InstructionReg          <= (others => 'X');
+                        InstructionReg          <= (others => 'X') ;
                     end if;
 
                 when FETCH_IR =>
+
+                    SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                    SH2SelDataBus <= HOLD_DATA_BUS;
+
                      ---------------------------------------------------------- Fetch the next instruction
                     
                     if (store_opcode_in_low_byte = '0') then
                         -- Read high bytes in, write disable
                         WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
                         RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0'; 
-                        InstructionReg <= SH2DataBus(regLen-1 downto instrLen); 
+                        InstructionReg <= SH2DataBus(regLen-1 downto instrLen) or INSTR_LEN_ZEROS; 
 
                         -- next write, write low byte of same address
                         store_opcode_in_low_byte <= '1';
@@ -638,7 +654,8 @@ begin
                     end if;
 
                     report "IR = " & to_hstring(SH2DataBus);
-                    report "PC = " & to_hstring(SH2AddressBus);
+                    report "AddressBus = " & to_hstring(SH2AddressBus);
+                    report "PC = " & to_hstring(SH2PC);
                     
                 when others =>
 
@@ -724,7 +741,7 @@ begin
 
     SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
         SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
-        SH2ProgramAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
+        SH2PC when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
             (others => 'Z');
 
 end Structural;
