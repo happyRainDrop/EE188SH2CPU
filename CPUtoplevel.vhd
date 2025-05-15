@@ -32,6 +32,8 @@
 --                                  Add Enable signal: allow CPU and testbench to tell each other when they are reading/writing  
 --     13 May 25  Ruth Berkun       Remove Enable signal, move memory out of CPU (oops why did we put it here)            
 --     13 May 25  Nerissa Finnen    Added constant to hold and update the PMAU and DMAU properly 
+--     14 May 25  Ruth Berkun       Fixed Address and Data bus muxing issue (set to high Z when testbench accesses it)
+--                                  (And fixed corresponding setting of mux mode in finite state machine)
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -317,6 +319,11 @@ end CPUtoplevel;
  
 architecture Structural of CPUtoplevel is
 
+    -- Constants --
+    --====================================================================================================================
+    constant REG_LEN_ZEROS : std_logic_vector(regLen-1 downto 0) := (others => '0');
+    constant INSTR_LEN_ZEROS : std_logic_vector(instrLen-1 downto 0) := (others => '0');
+
     -- Control Signals --
     --==================================================================================================================================================
     ------------------------------------------------------------------------------------------------------------------
@@ -392,7 +399,7 @@ architecture Structural of CPUtoplevel is
     signal RegArrayOutA1 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
 
-    signal SH2PC : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    signal SH2PC : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- the PC: a very special register!
     ------------------------------------------------------------------------------------------
 
     -- Signals and states
@@ -407,11 +414,9 @@ architecture Structural of CPUtoplevel is
     signal ClockCounter     : std_logic_vector(regLen - 1 downto 0); -- what clock cycle are we on?
     signal store_opcode_in_low_byte : std_logic := '0';  -- store in high byte then low byte
 
-    constant REG_LEN_ZEROS : std_logic_vector(regLen-1 downto 0) := (others => '0');
-    constant INSTR_LEN_ZEROS : std_logic_vector(instrLen-1 downto 0) := (others => '0');
-
 begin
 
+    -- ================================================================================================== Entity Instantiations
     -- Instantiate register array
     SH2RegArray : entity work.SH2RegArray
         port map (
@@ -482,10 +487,10 @@ begin
             SH2ProgramAddressBus => SH2PC        --make the PC come out into here
             );    
     
+    -- ================================================================================================== Finite State Machine
     updatePCandIRandSetNextState: process(SH2clock)
     begin
-        --On the rising edge of the CurrentState
-        --Perform state-specific tasks
+        --On the rising edge of the CurrentState, perform state-specific tasks
             --ZERO_CLK
                 --Stop the PC
                 --Fetch the instruction
@@ -504,6 +509,7 @@ begin
             case CurrentState is 
                 when ZERO_CLK =>
                     ------------------------------------------------ Setting control signals
+
                     --Setting PMAU control signals
                     SH2PMAUReset            <= PMAU_RESET;
                     SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
@@ -516,32 +522,31 @@ begin
                     ------------------------------------------------ Update state
                     if (Reset = '1') then           -- Reset is active low, so '1' means we're not reset
                         CurrentState <= FETCH_IR;
-                        SH2SelAddressBus <= OPEN_ADDRESS_BUS; -- 
-                        SH2SelDataBus <= OPEN_DATA_BUS;
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; -- 
+                        SH2SelDataBus <= HOLD_DATA_BUS;
                         
                     else 
                         CurrentState <= ZERO_CLK;   -- We are resetting
                         -- Set data, address buses to high impedance so that test bench can write them
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
                         SH2SelDataBus <= OPEN_DATA_BUS;
                     end if;
 
                 when FETCH_IR =>
 
-                    ------------------------------------------------ Setting control signals
-                    --Set clock counter back to 1
-                    ClockCounter            <= ONE_CLOCK;
 
-                    --
+                    ------------------------------------------------ Setting control signals
                     -- Set data, address buses to high impedance so that test bench can write them
                     SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                    SH2SelDataBus <= OPEN_DATA_BUS;
+                    SH2SelDataBus <= HOLD_DATA_BUS;
+
+                    --Set clock counter back to 1
+                    ClockCounter            <= ONE_CLOCK;
                     
-                    --Setting PMAU control signals
+                    --Setting PMAU control signals: Want PMAU to increment
                     SH2PMAUReset            <= PMAU_NO_RESET;
                     SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
                     -- PMAUImmediateSource  <= ClockCounter;
-                    -- FIX ME
                     SH2PMAUOffsetSel        <= DEFAULT_NO_OFF_VAL;
                     SH2PMAUIncDecSel        <= DEFAULT_INC_SEL;
                     SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
@@ -549,16 +554,27 @@ begin
 
                     ------------------------------------------------ Set next state
                     if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
+                        report "End of file reached.";
                         CurrentState <= END_OF_FILE;
                     else 
                         CurrentState <= FETCH_IR;
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                        SH2SelDataBus <= HOLD_DATA_BUS;
                     end if;
+
+                    report "FALLING EDGE OF CLOCK: ";
+                    report "IR = " & to_hstring(InstructionReg);
+                    report "DataBus = " & to_hstring(SH2DataBus);
+                    report "PC = " & to_hstring(SH2PC);
+                    report "AddressBus = " & to_hstring(SH2AddressBus);
+                    report "=========================";
+                    
 
                 when END_OF_FILE =>
                     
                     -------------------------------------------------- Setting control signals
+
+                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                    SH2SelDataBus <= OPEN_DATA_BUS;  
+
                     --Setting PMAU control signals
                     SH2PMAUReset            <= PMAU_RESET;
                     SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
@@ -592,12 +608,8 @@ begin
                 CurrentState <= ZERO_CLK;   -- We are resetting
             end if;
 
-            report "IR = " & to_hstring(SH2DataBus);
-            report "AddressBus = " & to_hstring(SH2AddressBus);
-            report "PC = " & to_hstring(SH2PC);
         end if;
-        --On the falling edge of the CurrentState
-        --Update Read and Write for correct RAM interaction based on state
+        --On the falling edge of the clock, update Read and Write for correct RAM interaction based on state
             --ZERO_CLK
                 --Read enabled for fetching first instruction
                 --Write disabled, busy fetching instruction
@@ -615,7 +627,7 @@ begin
                     --Fetching first instruction (high bytes of DataBus)
                     if (Reset = '1') then
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                        SH2SelDataBus <= OPEN_DATA_BUS;
+                        SH2SelDataBus <= HOLD_DATA_BUS;
                         WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- not writing only read high bytes
                         RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0';
                         InstructionReg          <= SH2DataBus(regLen-1 downto instrLen) or INSTR_LEN_ZEROS;
@@ -629,41 +641,50 @@ begin
 
                 when FETCH_IR =>
 
-                    SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                    SH2SelDataBus <= HOLD_DATA_BUS;
-
                      ---------------------------------------------------------- Fetch the next instruction
                     
                     if (store_opcode_in_low_byte = '0') then
                         -- Read high bytes in, write disable
                         WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
                         RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0'; 
-                        InstructionReg <= SH2DataBus(regLen-1 downto instrLen) or INSTR_LEN_ZEROS; 
+                        InstructionReg <= SH2DataBus(regLen-1 downto instrLen); 
 
                         -- next write, write low byte of same address
                         store_opcode_in_low_byte <= '1';
+
                     else
                         -- Read low bytes in, write disable
                         WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
                         RE0 <= '0'; RE1 <= '0'; RE2 <= '1'; RE3 <= '1'; 
-                        InstructionReg <= SH2DataBus(instrLen-1 downto 0); 
+                        InstructionReg <= SH2DataBus(instrLen-1 downto 0);  
 
                         -- written low byte so next instruction need to write high byte of new memory location
                         store_opcode_in_low_byte <= '0';
 
                     end if;
 
-                    report "IR = " & to_hstring(SH2DataBus);
-                    report "AddressBus = " & to_hstring(SH2AddressBus);
-                    report "PC = " & to_hstring(SH2PC);
-                    
-                when others =>
+                    -- Now, for the rising edge of the clock, need to hold data bus.
+                    SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                    SH2SelDataBus <= HOLD_DATA_BUS;
 
-                        InstructionReg <= NOP;
-                        SH2SelDataBus <= OPEN_DATA_BUS;         -- no writing to buses when end of file!
-                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
-                        RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; 
+                    report "FALLING EDGE OF CLOCK: ";
+                    report "IR = " & to_hstring(InstructionReg);
+                    report "DataBus = " & to_hstring(SH2DataBus);
+                    report "PC = " & to_hstring(SH2PC);
+                    report "AddressBus = " & to_hstring(SH2AddressBus);
+                    report "=========================";
+                    
+                when others => -- halt the CPU
+
+                    -- Set data, address buses to high impedance so that test bench can write them
+                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                    SH2SelDataBus <= OPEN_DATA_BUS;
+
+                    -- Do not read, write, or carry out any instructions
+                    InstructionReg <= NOP;
+                    WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
+                    RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; 
+                    
             end case;
         end if;
     end process updatePCandIRandSetNextState;
@@ -672,9 +693,10 @@ begin
     --Set Read and Write to inactive during the rising edge of the clock
    
 
---combinational if statements
---Matches the 
---at the end of the matches -> update the currentstate with nextState variable
+    -- ================================================================================================== Instruction Decoding, State Determination
+    --combinational if statements
+    --Matches the 
+    --at the end of the matches -> update the currentstate with nextState variable
     matchInstruction : process(SH2clock)
     begin
         if rising_edge(SH2clock) then
@@ -733,7 +755,7 @@ begin
         end if;
     end process matchInstruction;
 
-    -- Set buses
+    -- Set buses (This is combinational, outside of any clocked process.)
     SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
         RegArrayOutA when SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT else
         SH2ALUResult when SH2SelDataBus = SET_DATA_BUS_TO_ALU_OUT else

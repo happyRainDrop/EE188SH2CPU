@@ -1,4 +1,5 @@
 e~cpu_testbench.o
 work-obj08.cf
 CPUtoplevel.o
-e~cpu_testbench.o
+CPU_Testbench.o
+cpu_testbench

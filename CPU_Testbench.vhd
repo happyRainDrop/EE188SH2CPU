@@ -8,11 +8,12 @@
 --      - CPUtoplevel
 --
 --  Revision History:
---      7 May 25  Ruth Berkun       Test writing one number to a single address in RAM
---      9 May 25  Ruth Berkun       Test all of memory is filled completed (with each of the 4 blocks having 8 32-bit words)
+--      07 May 25  Ruth Berkun      Test writing one number to a single address in RAM
+--      09 May 25  Ruth Berkun      Test all of memory is filled completed (with each of the 4 blocks having 8 32-bit words)
 --      12 May 25  Ruth Berkun      Modify reading portion to come from text file
 --      12 May 25  Ruth Berkun      Add Enable signal
 --      13 May 25  Ruth Berkun      Remove Enable signal, put memory instantiation here
+--      14 May 25  Ruth Berkun      Resolved clocking issues between switching from testbench to CPU-driven memory mode
 ----------------------------------------------------------------------------
 
 library ieee;
@@ -188,20 +189,22 @@ begin
             -- Done writing, set writing idle
             wait until rising_edge(SH2clock);
             tbWE0 <= '1'; tbWE1 <= '1'; tbWE2 <= '1'; tbWE3 <= '1';
-            report "addr = " & to_hstring(SH2AddressBus);
-            report "val = " & to_hstring(SH2DataBus);
+            -- report "addr = " & to_hstring(SH2AddressBus);
+            -- report "val = " & to_hstring(SH2DataBus);
 
         end loop;
 
         file_close(infile);
-        SH2DataBus <= (others => 'Z');         -- so that reading can access
-        SH2AddressBus <= (others => 'Z');         -- so that reading can access
-        wait for 10 ns;
+        wait until falling_edge(SH2clock);     -- follow pattern of waiting until falling edge of clock to change address bus
+        SH2DataBus <= (others => 'Z');         -- let CPU control data and address bus now
+        SH2AddressBus <= (others => 'Z');       
 
         -------------------------------------------------------------------- TURN ON CPU AND THE OFF
         report "Ready for CPU to access memory.";
+        wait until rising_edge(SH2clock);     -- reset on the rising edge
         Reset <= '1';
         wait for 1000 ns;
+        wait until rising_edge(SH2clock);     -- reset on the rising edge
         Reset <= '0';
         report "CPU DONE!!";
         -------------------------------------------------------------------- READING
@@ -223,8 +226,8 @@ begin
 
                 wait until rising_edge(SH2clock);
                 tbRE0 <= '1'; tbRE1 <= '1'; tbRE2 <= '1'; tbRE3 <= '1';
-                report "addr = " & to_hstring(SH2AddressBus);
-                report "val = " & to_hstring(SH2DataBus);
+                -- report "addr = " & to_hstring(SH2AddressBus);
+                -- report "val = " & to_hstring(SH2DataBus);
 
                 write(L, string'("Addr "));
                 write(L, i);
