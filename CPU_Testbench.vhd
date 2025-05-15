@@ -206,6 +206,10 @@ begin
         wait for 1000 ns;
         wait until rising_edge(SH2clock);     -- reset on the rising edge
         Reset <= '0';
+
+        wait until falling_edge(SH2clock);     -- follow pattern of waiting until falling edge of clock to change address bus
+        SH2DataBus <= (others => 'Z');         -- let CPU control data and address bus now
+        SH2AddressBus <= (others => 'Z'); 
         report "CPU DONE!!";
         -------------------------------------------------------------------- READING
 

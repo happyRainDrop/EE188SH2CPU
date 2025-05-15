@@ -541,15 +541,6 @@ begin
 
                     --Set clock counter back to 1
                     ClockCounter            <= ONE_CLOCK;
-                    
-                    --Setting PMAU control signals: Want PMAU to increment
-                    SH2PMAUReset            <= PMAU_NO_RESET;
-                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
-                    -- PMAUImmediateSource  <= ClockCounter;
-                    SH2PMAUOffsetSel        <= DEFAULT_NO_OFF_VAL;
-                    SH2PMAUIncDecSel        <= DEFAULT_INC_SEL;
-                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
-                    SH2PMAUPrePostSel       <= DEFAULT_PRE_SEL;
 
                     ------------------------------------------------ Set next state
                     if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
@@ -575,6 +566,8 @@ begin
                     report "PC = " & to_hstring(SH2PC);
                     report "AddressBus = " & to_hstring(SH2AddressBus);
                     report "SH2SelDataBus = " & integer'image(SH2SelDataBus);
+                    report "Reading = " & std_logic'image(not (RE3 and RE2 and RE1 and RE0));
+                    report "Writing = " & std_logic'image(not (WE3 and WE2 and WE1 and WE0));
                     report "=========================";
                     
 
@@ -637,19 +630,7 @@ begin
             case CurrentState is
                 when ZERO_CLK =>
 
-                    -- sus...doesn't work (fill IR with correct value) without this but doesn't report getting here either
-                    report "we get here??";
-                    ------------------------------------------------ Load in first instruction
-                    --Fetching first instruction (high bytes of DataBus)
-                    if (Reset = '1') then
-                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- not writing only read high bytes
-                        RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0';
-                        InstructionReg          <= SH2DataBus(regLen-1 downto instrLen);
-                    else 
-                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- no reading or writing
-                        RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1';
-                        InstructionReg          <= (others => 'X') ;
-                    end if;
+                    -- do nothing.
 
                 when FETCH_IR =>
 
@@ -685,6 +666,8 @@ begin
                     report "PC = " & to_hstring(SH2PC);
                     report "AddressBus = " & to_hstring(SH2AddressBus);
                     report "SH2SelDataBus = " & integer'image(SH2SelDataBus);
+                    report "Reading = " & std_logic'image(not (RE3 and RE2 and RE1 and RE0));
+                    report "Writing = " & std_logic'image(not (WE3 and WE2 and WE1 and WE0));
                     report "=========================";
                     
                 when others => -- halt the CPU
