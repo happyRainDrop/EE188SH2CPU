@@ -1,0 +1,41 @@
+[*]
+[*] GTKWave Analyzer v3.3.116 (w)1999-2023 BSI
+[*] Thu May 15 08:34:21 2025
+[*]
+[dumpfile] "/home/rberkun/Downloads/VHDLProjects/EE188SH2CPU/CPUTest"
+[dumpfile_mtime] "Thu May 15 08:30:43 2025"
+[dumpfile_size] 3322
+[savefile] "/home/rberkun/Downloads/VHDLProjects/EE188SH2CPU/CPUTest.gtkw"
+[timestart] 0
+[size] 1920 1080
+[pos] -4 -142
+*-22.799999 19640 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 507
+[signals_width] 190
+[sst_expanded] 1
+[sst_vpaned_height] 325
+@28
+memre0
+memre1
+memre2
+memre3
+memwe0
+memwe1
+memwe2
+memwe3
+reset
+sh2clock
+@22
+sh2addressbus[31:0]
+sh2externalmemory.memab[31:0]
+dut.sh2pc[31:0]
+sh2databus[31:0]
+sh2externalmemory.memdb[31:0]
+@23
+dut.instructionreg[15:0]
+@28
+dut.sh2seladdressbus
+dut.sh2seldatabus
+dut.currentstate
+[pattern_trace] 1
+[pattern_trace] 0

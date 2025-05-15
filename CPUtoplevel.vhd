@@ -408,7 +408,6 @@ architecture Structural of CPUtoplevel is
     type states is (ZERO_CLK, FETCH_IR, END_OF_FILE); 
     --TWO_CLK_W, TWO_CLK_R, THREE_CLK_R, THREE_CLK_W);
     signal CurrentState     : states;
-    signal NextState      : states; --ughghghhggh
 
     signal InstructionReg   : std_logic_vector(instrLen - 1 downto 0); -- IR
     signal ClockCounter     : std_logic_vector(regLen - 1 downto 0); -- what clock cycle are we on?
@@ -522,12 +521,15 @@ begin
                     ------------------------------------------------ Update state
                     if (Reset = '1') then           -- Reset is active low, so '1' means we're not reset
                         CurrentState <= FETCH_IR;
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; -- 
+
+                        -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z.
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; 
                         SH2SelDataBus <= HOLD_DATA_BUS;
                         
                     else 
                         CurrentState <= ZERO_CLK;   -- We are resetting
-                        -- Set data, address buses to high impedance so that test bench can write them
+
+                        -- For the next state: Set data, address buses to high impedance so that test bench can write them
                         SH2SelAddressBus <= OPEN_ADDRESS_BUS;
                         SH2SelDataBus <= OPEN_DATA_BUS;
                     end if;
@@ -536,9 +538,6 @@ begin
 
 
                     ------------------------------------------------ Setting control signals
-                    -- Set data, address buses to high impedance so that test bench can write them
-                    SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                    SH2SelDataBus <= HOLD_DATA_BUS;
 
                     --Set clock counter back to 1
                     ClockCounter            <= ONE_CLOCK;
@@ -556,24 +555,32 @@ begin
                     if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
                         report "End of file reached.";
                         CurrentState <= END_OF_FILE;
+
+                        -- For the next state: Set data, address buses to high impedance so that test bench can write them
+                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
+
                     else 
                         CurrentState <= FETCH_IR;
+
+                        -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                        SH2SelDataBus <= HOLD_DATA_BUS;
+
                     end if;
 
-                    report "FALLING EDGE OF CLOCK: ";
+                    report "RISING EDGE OF CLOCK: ";
                     report "IR = " & to_hstring(InstructionReg);
                     report "DataBus = " & to_hstring(SH2DataBus);
                     report "PC = " & to_hstring(SH2PC);
                     report "AddressBus = " & to_hstring(SH2AddressBus);
+                    report "SH2SelDataBus = " & integer'image(SH2SelDataBus);
                     report "=========================";
                     
 
                 when END_OF_FILE =>
                     
-                    -------------------------------------------------- Setting control signals
-
-                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                    SH2SelDataBus <= OPEN_DATA_BUS;  
+                    -------------------------------------------------- Setting control signals 
 
                     --Setting PMAU control signals
                     SH2PMAUReset            <= PMAU_RESET;
@@ -583,11 +590,13 @@ begin
                     SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
                     SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
                     SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
-                    SH2SelDataBus <= OPEN_DATA_BUS;         -- no writing to buses when end of file!
-                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
 
                     -------------------------------------------------- Update state
                     CurrentState <= END_OF_FILE;
+
+                    -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z
+                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                    SH2SelDataBus <= OPEN_DATA_BUS; 
 
                 when others =>
                     --Should not get here
@@ -602,6 +611,11 @@ begin
 
                     --Do nothing
                     InstructionReg          <= NOP;
+
+                    -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z
+                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                    SH2SelDataBus <= OPEN_DATA_BUS; 
+                    
             end case;
 
             if (Reset = '0') then 
@@ -623,17 +637,15 @@ begin
             case CurrentState is
                 when ZERO_CLK =>
 
+                    -- sus...doesn't work (fill IR with correct value) without this but doesn't report getting here either
+                    report "we get here??";
                     ------------------------------------------------ Load in first instruction
                     --Fetching first instruction (high bytes of DataBus)
                     if (Reset = '1') then
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                        SH2SelDataBus <= HOLD_DATA_BUS;
                         WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- not writing only read high bytes
                         RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0';
-                        InstructionReg          <= SH2DataBus(regLen-1 downto instrLen) or INSTR_LEN_ZEROS;
+                        InstructionReg          <= SH2DataBus(regLen-1 downto instrLen);
                     else 
-                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                        SH2SelDataBus <= OPEN_DATA_BUS;
                         WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1';  -- no reading or writing
                         RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1';
                         InstructionReg          <= (others => 'X') ;
@@ -672,13 +684,10 @@ begin
                     report "DataBus = " & to_hstring(SH2DataBus);
                     report "PC = " & to_hstring(SH2PC);
                     report "AddressBus = " & to_hstring(SH2AddressBus);
+                    report "SH2SelDataBus = " & integer'image(SH2SelDataBus);
                     report "=========================";
                     
                 when others => -- halt the CPU
-
-                    -- Set data, address buses to high impedance so that test bench can write them
-                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                    SH2SelDataBus <= OPEN_DATA_BUS;
 
                     -- Do not read, write, or carry out any instructions
                     InstructionReg <= NOP;
