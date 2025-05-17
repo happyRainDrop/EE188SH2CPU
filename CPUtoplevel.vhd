@@ -34,6 +34,7 @@
 --     13 May 25  Nerissa Finnen    Added constant to hold and update the PMAU and DMAU properly 
 --     14 May 25  Ruth Berkun       Fixed Address and Data bus muxing issue (set to high Z when testbench accesses it)
 --                                  (And fixed corresponding setting of mux mode in finite state machine)
+--     17 May 25  Nerissa Finnen    Fixed first instruction attempt, redid instruction constants table (3rd time)
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -143,7 +144,7 @@ package SH2_IR_Constants is
     -- SH-2 Instruction Opcode Constants
     -- Register, immediate, and specified registers
     constant ADD_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1100";
-    constant ADD_imm_Rn : std_logic_vector(15 downto 0) := "0111XXXXXXXXXXXX";
+    constant ADD_imm_Rn : std_logic_vector(15 downto 0) := "0111------------";
     constant ADDC_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1110";
     constant ADDV_Rm_Rn : std_logic_vector(15 downto 0) := "0011XXXXXXXX1111";
     constant AND_Rm_Rn : std_logic_vector(15 downto 0) := "0010XXXXXXXX1001";
@@ -695,10 +696,12 @@ begin
                 
             -- report "IR     = " & to_hstring(InstructionReg);
             -- report "ADDIMM = " & to_hstring(ADD_imm_Rn);
-            if std_match(InstructionReg, "0111XXXXXXXXXXXX") then
+            if std_match(InstructionReg, ADD_imm_Rn) then
                 report "YIPPEEEEEEEEEEEEEEEE";
                 --Setting Reg Array control signals
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegStore <= '1';
+                SH2RegAxStore <= '0';
                 
                 --Setting ALU control signals
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
@@ -707,7 +710,8 @@ begin
                 SH2FCmd                     <= "0000";
                 SH2CinCmd                   <= "00";
                 SH2SCmd                     <= "000";   --Doesn't matter what this does, not selecting the output
-                SH2ALUCmd                   <= "01";          
+                SH2ALUCmd                   <= "01";   
+                       
 
             elsif std_match(SHLL_Rn, InstructionReg) then
                 --Setting Reg Array control signals
