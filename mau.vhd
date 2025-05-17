@@ -20,7 +20,6 @@
 --      4 Feb 21  Glen George       Added missing library declaration.
 --      4 Feb 21  Glen George       Added initialization of low bit of carry
 --                                  for the adder.
---      3 May 25  Ruth Berkun       Fix to use intermediate signals
 ----------------------------------------------------------------------------
 
 
@@ -207,8 +206,8 @@ begin
     -- input to the offset adder is either the original source or the
     --    incremented/decremented source, depending on whether doing pre- or
     --    post- increment/decrement
-    SrcAddr  <=  AddrSrc(SrcSel)  when  PrePostSel = MemUnit_PRE   else
-                 OutSrcAddr       when  PrePostSel = MemUnit_POST  else
+    SrcAddr  <=  AddrSrc(SrcSel)  when  PrePostSel = MemUnit_POST   else
+                 OutSrcAddr       when  PrePostSel = MemUnit_PRE  else
                  (others => 'X');
 
 

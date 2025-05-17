@@ -372,7 +372,7 @@ architecture Structural of CPUtoplevel is
                                                                                         -- (Need control line to see which src)
     -------------------------------------------------------------------------------------
     -- PMAU FROM CONTROL LINE INPUTS
-    signal SH2PMAUReset      : std_logic := '0';
+    signal SH2PMAUHold      : std_logic := '0';
     signal SH2PMAUSrcSel     : integer  range pmauSourceCount - 1 downto 0 := 0;
     signal SH2PMAUOffsetSel  : integer  range pmauOffsetCount - 1 downto 0 := 0;
     signal SH2PMAUIncDecSel  : std_logic := '0';
@@ -400,6 +400,7 @@ architecture Structural of CPUtoplevel is
     signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
 
     signal SH2PC : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- the PC: a very special register!
+    signal SH2PC_next : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- what to set PC to on next rising edge of clock
     signal SH2PCdummy : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- because right now, the PMAU is a dummy
     ------------------------------------------------------------------------------------------
 
@@ -479,7 +480,8 @@ begin
     -- Instantiate PMAU
     SH2PMAU : entity  work.SH2PMAU
         port map(
-            SH2PMAUReset => SH2PMAUReset,
+            SH2PMAUHold => SH2PMAUHold,
+            SH2PC => SH2PCdummy,
             SH2PMAURegSource => RegArrayOutA, 
             SH2PMAUImmediateSource => PMAUImmediateSource, 
             SH2PMAURegOffset => RegArrayOutB, 
@@ -489,7 +491,7 @@ begin
             SH2PMAUIncDecSel  => SH2PMAUIncDecSel, 
             SH2PMAUIncDecBit  => SH2PMAUIncDecBit, 
             SH2PMAUPrePostSel => SH2PMAUPrePostSel, 
-            SH2ProgramAddressBus => SH2PCdummy        --make the PC come out into here
+            SH2ProgramAddressBus => SH2PC_next        --make the PC come out into here
             );    
     
     -- ================================================================================================== Finite State Machine
@@ -516,7 +518,7 @@ begin
                     ------------------------------------------------ Setting control signals
 
                     --Setting PMAU control signals
-                    SH2PMAUReset            <= PMAU_RESET;
+                    SH2PMAUHold            <= PMAU_RESET;
                     SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
                     PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
                     SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
@@ -547,10 +549,16 @@ begin
                         report "Incremented PC = " & to_hstring(std_logic_vector(unsigned(SH2PC or REG_LEN_ZEROES) + 1));
                     end if;
 
-                    ------------------------------------------------ Setting control signals
+                    -------------------------------------------------- Update the PC (so that it will change on rising edge of next clock)
+                    SH2PMAUHold            <= PMAU_NO_RESET;
+                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
+                    -- PMAUImmediateSource  <= ClockCounter;
+                    SH2PMAUOffsetSel        <= DEFAULT_NO_OFF_VAL;
+                    SH2PMAUIncDecSel        <= DEFAULT_INC_SEL;
+                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
+                    SH2PMAUPrePostSel       <= DEFAULT_PRE_SEL;
 
-                    --Set clock counter back to 1
-                    ClockCounter            <= ONE_CLOCK;
+                    SH2PCdummy <= SH2PC_next;
 
                     ------------------------------------------------ Set next state
                     if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
@@ -587,7 +595,7 @@ begin
                     -------------------------------------------------- Setting control signals 
 
                     --Setting PMAU control signals
-                    SH2PMAUReset            <= PMAU_RESET;
+                    SH2PMAUHold            <= PMAU_RESET;
                     SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
                     PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
                     SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
@@ -605,7 +613,7 @@ begin
                 when others =>
                     --Should not get here
                     --But if it does, do not update the PC
-                    SH2PMAUReset            <= PMAU_RESET;
+                    SH2PMAUHold            <= PMAU_RESET;
                     SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
                     PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
                     SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
@@ -644,6 +652,11 @@ begin
                     -- do nothing.
 
                 when FETCH_IR =>
+
+                    ------------------------------------------------ Setting control signals
+
+                    --Set clock counter back to 1
+                    ClockCounter            <= ONE_CLOCK;
 
                      ---------------------------------------------------------- Fetch the next instruction
                     
@@ -768,7 +781,7 @@ begin
         SH2PC when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
             (others => 'Z');
 
-    -- Make instruction reg combination so that it updates immediately
+    -- Make instruction reg combinational so that it updates immediately
     InstructionReg <= SH2DataBus(regLen-1 downto instrLen) when (store_opcode_in_low_byte = '1') else SH2DataBus(instrLen-1 downto 0); 
 
 end Structural;

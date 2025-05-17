@@ -16,6 +16,7 @@
 --      3 May 25  Ruth Berkun       Fixed shifting syntax error
 --     12 May 25  Ruth Berkun       Move PC into the PMAU (so that regArray doesn't have
 --                                  to be constantly outputting PC every clock)
+--     16 May 25  Ruth Berkun       Do not let PC feed into itself
 ----------------------------------------------------------------------------
 
 library ieee;
@@ -53,7 +54,8 @@ use ieee.std_logic_1164.all;
 
 entity  SH2PMAU  is
     port(
-        SH2PMAUReset : in std_logic;    -- active low: 0 to reset
+        SH2PMAUHold : in std_logic;    -- 0 to hold, 1 to not
+        SH2PC : in      std_logic_vector(regLen - 1 downto 0); -- PC as input source
         SH2PMAURegSource :  in std_logic_vector(regLen-1 downto 0);
         SH2PMAUImmediateSource :  in std_logic_vector(regLen-1 downto 0);
         SH2PMAURegOffset :  in std_logic_vector(regLen-1 downto 0);
@@ -96,14 +98,15 @@ architecture  behavioral  of  SH2PMAU  is
     end component;
 
     -- PC
-    signal SH2PC : std_logic_vector(regLen-1 downto 0) := (others => '0');
+    signal SH2PC_INTERNAL : std_logic_vector(regLen-1 downto 0) := (others => '0');
 
     -- PMAU source arrays
     signal SH2PMAUAddrSrc : std_logic_array(pmauSourceCount - 1 downto 0)(regLen - 1 downto 0);
     signal SH2PMAUAddrOff :std_logic_array(pmauOffsetCount - 1 downto 0)(regLen - 1 downto 0);
 
     -- Intermediates
-    signal genericMAUProgramAddressBus : std_logic_vector(regLen-1 downto 0) := (others => '0');
+    signal genericMAUProgramAddress : std_logic_vector(regLen-1 downto 0) := (others => '0');           -- output address of generic MAU
+    signal genericMAUProgramAddressIncDec : std_logic_vector(regLen-1 downto 0) := (others => '0');           -- output address of generic MAU
 
 begin
 
@@ -111,7 +114,7 @@ begin
     -- Fill source array. 
     SH2PMAUAddrSrc(PMAU_SRC_SEL_REG) <= SH2PMAURegSource; --Sources can come from register array
     SH2PMAUAddrSrc(PMAU_SRC_SEL_IMM) <= SH2PMAUImmediateSource; --or be an immediate value from the control unit
-    SH2PMAUAddrSrc(PMAU_SRC_SEL_PC) <= SH2PC; -- or PC 
+    SH2PMAUAddrSrc(PMAU_SRC_SEL_PC) <= SH2PC; -- or PC (external)
 
     -- Fill offset array.
     SH2PMAUAddrOff(PMAU_OFFSET_SEL_ZEROES) <= (others => '0');  -- Offset can be all zeros (no offset)
@@ -139,12 +142,11 @@ begin
             IncDecSel  => SH2PMAUIncDecSel,
             IncDecBit  => SH2PMAUIncDecBit,
             PrePostSel => SH2PMAUPrePostSel,
-
-            Address => genericMAUProgramAddressBus,
-            AddrSrcOut => open -- PC
+            Address => open,
+            AddrSrcOut => genericMAUProgramAddress -- PC
         );
 
-        SH2PC <= genericMAUProgramAddressBus when (SH2PMAUReset = '1') else  (others => '0'); -- reset
-        SH2ProgramAddressBus <= SH2PC; -- output of PMAU is the PC address
+        SH2PC_INTERNAL <= genericMAUProgramAddress when (SH2PMAUHold = '1') else SH2PC_INTERNAL; -- hold logic
+        SH2ProgramAddressBus <= SH2PC_INTERNAL; -- output of PMAU is the PC address
 
 end  behavioral;
