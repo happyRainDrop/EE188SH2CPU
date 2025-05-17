@@ -546,7 +546,7 @@ begin
 
                     if (store_opcode_in_low_byte = '0') then
                         SH2PC <= std_logic_vector(unsigned(SH2PC or REG_LEN_ZEROES) + 1);
-                        report "Incremented PC = " & to_hstring(std_logic_vector(unsigned(SH2PC or REG_LEN_ZEROES) + 1));
+                        -- report "Incremented PC = " & to_hstring(std_logic_vector(unsigned(SH2PC or REG_LEN_ZEROES) + 1));
                     end if;
 
                     -------------------------------------------------- Update the PC (so that it will change on rising edge of next clock)
@@ -577,19 +577,7 @@ begin
                         SH2SelDataBus <= HOLD_DATA_BUS;
 
                     end if;
-
-                    report "RISING EDGE OF CLOCK: ";
-                    report "IR = " & to_hstring(InstructionReg);
-                    report "DataBus = " & to_hstring(SH2DataBus);
-                    report "PC = " & to_hstring(SH2PC);
-                    report "AddressBus = " & to_hstring(SH2AddressBus);
-                    report "SH2SelDataBus = " & integer'image(SH2SelDataBus);
-                    report "Reading = " & std_logic'image(not (RE3 and RE2 and RE1 and RE0));
-                    report "Writing = " & std_logic'image(not (WE3 and WE2 and WE1 and WE0));
-                    report "SH2SelAddressBus = " & integer'image(SH2SelAddressBus);
-                    report "=========================";
                     
-
                 when END_OF_FILE =>
                     
                     -------------------------------------------------- Setting control signals 
@@ -681,17 +669,6 @@ begin
                     -- Now, for the rising edge of the clock, need to hold data bus.
                     SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
                     SH2SelDataBus <= OPEN_DATA_BUS;
-
-                    report "FALLING EDGE OF CLOCK: ";
-                    report "IR = " & to_hstring(InstructionReg);
-                    report "DataBus = " & to_hstring(SH2DataBus);
-                    report "PC = " & to_hstring(SH2PC);
-                    report "AddressBus = " & to_hstring(SH2AddressBus);
-                    report "SH2SelDataBus = " & integer'image(SH2SelDataBus);
-                    report "Reading = " & std_logic'image(not (RE3 and RE2 and RE1 and RE0));
-                    report "Writing = " & std_logic'image(not (WE3 and WE2 and WE1 and WE0));
-                    report "SH2SelAddressBus = " & integer'image(SH2SelAddressBus);
-                    report "=========================";
                     
                 when others => -- halt the CPU
 
@@ -716,7 +693,10 @@ begin
     begin
         if rising_edge(SH2clock) then
                 
-            if std_match(ADD_imm_Rn, InstructionReg) then
+            -- report "IR     = " & to_hstring(InstructionReg);
+            -- report "ADDIMM = " & to_hstring(ADD_imm_Rn);
+            if std_match(InstructionReg, "0111XXXXXXXXXXXX") then
+                report "YIPPEEEEEEEEEEEEEEEE";
                 --Setting Reg Array control signals
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
                 
