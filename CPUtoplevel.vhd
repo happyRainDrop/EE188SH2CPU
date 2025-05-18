@@ -679,6 +679,7 @@ begin
                 report "YIPPEEEEEEEEEEEEEEEE";
                 --Setting Reg Array control signals
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
                 SH2RegStore <= '1';
                 SH2RegAxStore <= '0';
                 
@@ -718,7 +719,22 @@ begin
                 SH2CinCmd                   <= "00";
                 SH2SCmd                     <= "000";
                 SH2ALUCmd                   <= "00";
-            
+
+            elsif std_match(AND_imm_R0, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
+                SH2RegStore <= '1';
+                SH2RegAxStore <= '0';
+                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
+                SH2ALUUseImmediateOperand   <= '0';
+
+                --Setting ALU control signals
+                SH2Cin                      <= '0';
+                SH2FCmd                     <= "1000";
+                SH2CinCmd                   <= "00";
+                SH2SCmd                     <= "000";
+                SH2ALUCmd                   <= "00";
+        
             elsif std_match(NOP, InstructionReg) then
                 --Setting Reg Array control signals
                 SH2RegStore <= '0';
