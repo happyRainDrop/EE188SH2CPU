@@ -402,7 +402,6 @@ architecture Structural of CPUtoplevel is
 
     signal SH2PC : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- the PC: a very special register!
     signal SH2PC_next : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- what to set PC to on next rising edge of clock
-    signal SH2PCdummy : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- because right now, the PMAU is a dummy
     ------------------------------------------------------------------------------------------
 
     -- Signals and states
@@ -414,7 +413,6 @@ architecture Structural of CPUtoplevel is
 
     signal InstructionReg   : std_logic_vector(instrLen - 1 downto 0) := (others => 'Z'); -- IR
     signal ClockCounter     : std_logic_vector(regLen - 1 downto 0); -- what clock cycle are we on?
-    signal store_opcode_in_low_byte : std_logic := '0';  -- store in high byte then low byte
 
     attribute keep : boolean;
     attribute keep of SH2SelAddressBus : signal is true;
@@ -482,7 +480,7 @@ begin
     SH2PMAU : entity  work.SH2PMAU
         port map(
             SH2PMAUHold => SH2PMAUHold,
-            SH2PC => SH2PCdummy,
+            SH2PC => SH2PC,
             SH2PMAURegSource => RegArrayOutA, 
             SH2PMAUImmediateSource => PMAUImmediateSource, 
             SH2PMAURegOffset => RegArrayOutB, 
@@ -544,12 +542,7 @@ begin
                     end if;
 
                 when FETCH_IR =>
-
-                    if (store_opcode_in_low_byte = '0') then
-                        SH2PC <= std_logic_vector(unsigned(SH2PC or REG_LEN_ZEROES) + 1);
-                        -- report "Incremented PC = " & to_hstring(std_logic_vector(unsigned(SH2PC or REG_LEN_ZEROES) + 1));
-                    end if;
-
+                
                     -------------------------------------------------- Update the PC (so that it will change on rising edge of next clock)
                     SH2PMAUHold            <= PMAU_NO_RESET;
                     SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
@@ -559,7 +552,7 @@ begin
                     SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
                     SH2PMAUPrePostSel       <= DEFAULT_PRE_SEL;
 
-                    SH2PCdummy <= SH2PC_next;
+                    SH2PC <= SH2PC_next;
 
                     ------------------------------------------------ Set next state
                     if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
@@ -649,23 +642,9 @@ begin
 
                      ---------------------------------------------------------- Fetch the next instruction
                     
-                    if (store_opcode_in_low_byte = '0') then
-                        -- Read high bytes in, write disable
-                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
-                        RE0 <= '1'; RE1 <= '1'; RE2 <= '0'; RE3 <= '0'; 
-
-                        -- next write, write low byte of same address
-                        store_opcode_in_low_byte <= '1';
-
-                    else
-                        -- Read low bytes in, write disable
-                        WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
-                        RE0 <= '0'; RE1 <= '0'; RE2 <= '1'; RE3 <= '1';  
-
-                        -- written low byte so next instruction need to write high byte of new memory location
-                        store_opcode_in_low_byte <= '0';
-
-                    end if;
+                    -- Read low bytes in (instructions stored in low bytes), write disable
+                    WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
+                    RE0 <= '0'; RE1 <= '0'; RE2 <= '1'; RE3 <= '1';  
 
                     -- Now, for the rising edge of the clock, need to hold data bus.
                     SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
@@ -766,6 +745,6 @@ begin
             (others => 'Z');
 
     -- Make instruction reg combinational so that it updates immediately
-    InstructionReg <= SH2DataBus(regLen-1 downto instrLen) when (store_opcode_in_low_byte = '1') else SH2DataBus(instrLen-1 downto 0); 
+    InstructionReg <= SH2DataBus(instrLen-1 downto 0);
 
 end Structural;

@@ -14,6 +14,7 @@
 --      12 May 25  Ruth Berkun      Add Enable signal
 --      13 May 25  Ruth Berkun      Remove Enable signal, put memory instantiation here
 --      14 May 25  Ruth Berkun      Resolved clocking issues between switching from testbench to CPU-driven memory mode
+--      17 May 25  Ruth Berkun      Change so that each instruction takes one full slot (low byte of 32 bits) in memory
 ----------------------------------------------------------------------------
 
 library ieee;
@@ -134,7 +135,6 @@ begin
         variable L : line;
         variable addr : integer := 0;
         variable opcode : std_logic_vector(instrLen-1 downto 0);
-        variable store_opcode_in_low_byte : std_logic := '0';  -- store in high byte then low byte
     begin
 
         ------------------------------------------------------------------- INIT
@@ -165,26 +165,14 @@ begin
             readline(infile, L);
             read(L, opcode);
 
-            if (store_opcode_in_low_byte = '0') then
-                -- Write bytes individually
-                wait until falling_edge(SH2clock);
-                SH2AddressBus <= std_logic_vector(to_unsigned(addr, 32)); 
-                SH2DataBus <= opcode & zeroes16; 
-                tbWE0 <= '1'; tbWE1 <= '1'; tbWE2 <= '0'; tbWE3 <= '0'; 
+            -- Write bytes individually
+            wait until falling_edge(SH2clock);
+            SH2AddressBus <= std_logic_vector(to_unsigned(addr, 32)); 
+            SH2DataBus <= zeroes16 & opcode; 
+            tbWE0 <= '0'; tbWE1 <= '0'; tbWE2 <= '1'; tbWE3 <= '1'; 
 
-                -- next write, write low byte of same address
-                store_opcode_in_low_byte := '1';
-            else
-                -- Write bytes individually
-                wait until falling_edge(SH2clock);
-                SH2AddressBus <= std_logic_vector(to_unsigned(addr, 32)); 
-                SH2DataBus <= zeroes16 & opcode; 
-                tbWE0 <= '0'; tbWE1 <= '0'; tbWE2 <= '1'; tbWE3 <= '1'; 
-
-                -- written low byte so next instruction need to write high byte of new memory location
-                addr := addr + 1;
-                store_opcode_in_low_byte := '0';
-            end if;
+            -- written low byte so next instruction need to write high byte of new memory location
+            addr := addr + 1;
 
             -- Done writing, set writing idle
             wait until rising_edge(SH2clock);
