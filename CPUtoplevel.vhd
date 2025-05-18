@@ -154,6 +154,7 @@ package SH2_CPU_Constants is
     constant REG_ZEROTH_SEL : integer := 0;
     constant REG_STORE      : std_logic := '1';
     constant REG_NO_STORE   : std_logic := '0';
+    constant STATUS_REG_INDEX   : integer := 17;
 
     -- ALU default values (not too important; 
     --                     ALU can do whatever it wants so long as it doesn't update address or data bus)
@@ -968,7 +969,7 @@ begin
                 DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
 
             --  ==================================================================================================
-            -- SHIFTS
+            -- SHIFTS (0/8)
             --  ==================================================================================================
             elsif std_match(SHLL_Rn, InstructionReg) then
                 
@@ -978,12 +979,13 @@ begin
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
+                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(regLen - 1)                         --Update the T-bit with the high bit value of Rn
+                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value    
+                --Default do not store anything at the rest of the register array        
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
                 SH2RegA2Sel <= REG_ZEROTH_SEL;
 
@@ -1012,17 +1014,18 @@ begin
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn   
+                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(0)                                  --Update the T-bit with the low bit value of Rn
+                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value                                                
+                --Default do not store anything at the rest of the register array                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
                 SH2RegA2Sel <= REG_ZEROTH_SEL;
 
                 --Setting ALU control signals
-                SH2SCmd                     <= "100";   --Left shift left
+                SH2SCmd                     <= "100";   --LSR
                 SH2ALUCmd                   <= "10";    --Select the shifter output
                 --Default
                 SH2Cin                      <= '0';
@@ -1046,17 +1049,18 @@ begin
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn    
+                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(0)                                  --Update the T-bit with the first bit value of Rn
+                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value                                               
+                --Default do not store anything at the rest of the register array                                            
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
                 SH2RegA2Sel <= REG_ZEROTH_SEL;
 
                 --Setting ALU control signals
-                SH2SCmd                     <= "101";   --Left shift left
+                SH2SCmd                     <= "101";   --ASR
                 SH2ALUCmd                   <= "10";    --Select the shifter output
                 --Default
                 SH2Cin                      <= '0';
@@ -1080,17 +1084,18 @@ begin
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
+                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(regLen - 1)                         --Update the T-bit with the high bit value of Rn
+                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value                                                 
+                --Default do not store anything at the rest of the register array                                            
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
                 SH2RegA2Sel <= REG_ZEROTH_SEL;
 
                 --Setting ALU control signals
-                SH2SCmd                     <= "000";   --Left shift left
+                SH2SCmd                     <= "000";   --LSL
                 SH2ALUCmd                   <= "10";    --Select the shifter output
                 --Default
                 SH2Cin                      <= '0';
@@ -1115,19 +1120,20 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(0)                                  --Update the T-bit with the first bit value of Rn
+                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value   
+                --Default do not store anything at the rest of the register array                                            
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
                 SH2RegA2Sel <= REG_ZEROTH_SEL;
 
                 --Setting ALU control signals
-                SH2SCmd                     <= "111";   --Left shift left
+                SH2Cin                      <= RegArrayOutB(0); --Feed in T-bit into RRC
+                SH2SCmd                     <= "111";   --RRC
                 SH2ALUCmd                   <= "10";    --Select the shifter output
                 --Default
-                SH2Cin                      <= '0';
                 SH2FCmd                     <= "0000";
                 SH2CinCmd                   <= "00";
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
@@ -1149,19 +1155,20 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(regLen - 1)                         --Update the T-bit with the high bit value of Rn
+                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value  
+                --Default do not store anything at the rest of the register array                                           
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
                 SH2RegA2Sel <= REG_ZEROTH_SEL;
 
                 --Setting ALU control signals
+                SH2Cin                      <= RegArrayOutB(0); --Feed in T-bit into RLC
                 SH2SCmd                     <= "011";   --Left shift left
                 SH2ALUCmd                   <= "10";    --Select the shifter output
                 --Default
-                SH2Cin                      <= '0';
                 SH2FCmd                     <= "0000";
                 SH2CinCmd                   <= "00";
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
@@ -1183,16 +1190,17 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(0)                                  --Update the T-bit with the first bit value of Rn
+                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value   
+                --Default do not store anything at the rest of the register array                                           
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
                 SH2RegA2Sel <= REG_ZEROTH_SEL;
 
                 --Setting ALU control signals
-                SH2SCmd                     <= "110";   --Left shift left
+                SH2SCmd                     <= "110";   --ROR
                 SH2ALUCmd                   <= "10";    --Select the shifter output
                 --Default
                 SH2Cin                      <= '0';
@@ -1216,17 +1224,20 @@ begin
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn     
+                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(regLen - 1)                         --Update the T-bit with the high bit value of Rn
+                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value                                              
+                --Default do not store anything at the rest of the register array                                             
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
                 SH2RegA2Sel <= REG_ZEROTH_SEL;
 
+                --17th register status register
+
                 --Setting ALU control signals
-                SH2SCmd                     <= "010";   --Left shift left
+                SH2SCmd                     <= "010";   --ROL
                 SH2ALUCmd                   <= "10";    --Select the shifter output
                 --Default
                 SH2Cin                      <= '0';
@@ -1314,9 +1325,30 @@ begin
                 SetDefaultControlSignals;
 
                 --Setting Reg Array control signals
-                SH2RegStore <= '0';
-                SH2RegAxStore <= '0';
+                --Default do not change the current values in the register array
+                SH2RegIn <= REG_ZEROS;                                           
+                SH2RegInSel <= REG_ZEROTH_SEL;   
+                SH2RegStore <= REG_NO_STORE;                                        
+                SH2RegASel  <= REG_ZEROTH_SEL;                                                  
+                SH2RegBSel  <= REG_ZEROTH_SEL;      
+                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegAxInSel <= REG_ZEROTH_SEL;
+                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegA1Sel <= REG_ZEROTH_SEL;
+                SH2RegA2Sel <= REG_ZEROTH_SEL;
 
+                --Setting ALU control signals
+                --We don't care not going to store anything s/th/he/y does
+                
+                --Setting DMAU control signals
+                --Default no incrementing values in DMAU settings
+                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
+                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
+                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
+                SH2DMAUIncDecBit    <= DEFAULT_BIT;
+                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
+                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
+                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
             else
                 --Setting Reg Array control signals
                 SH2RegStore <= '0';
