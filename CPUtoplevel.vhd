@@ -102,7 +102,7 @@ package SH2_CPU_Constants is
 
     -- Choosing data and address bus indicies
     constant NUM_DATA_BUS_OPTIONS : integer := 3; -- ALU, regs, hold, open
-    constant NUM_ADDRESS_BUS_OPTIONS : integer := 3; -- DMAU, PMAU, hold, open
+    constant NUM_ADDRESS_BUS_OPTIONS : integer := 4; -- DMAU, PMAU, regs, hold, open
     constant OPEN_DATA_BUS : integer := 0;
     constant HOLD_DATA_BUS : integer := 1;
     constant SET_DATA_BUS_TO_REG_A_OUT : integer := 2;
@@ -111,6 +111,7 @@ package SH2_CPU_Constants is
     constant HOLD_ADDRESS_BUS : integer := 1;
     constant SET_ADDRESS_BUS_TO_PMAU_OUT : integer := 2;
     constant SET_ADDRESS_BUS_TO_DMAU_OUT : integer := 3;
+    constant SET_ADDRESS_BUS_TO_REG_B_OUT : integer := 4;
 
     -- Holding settings for DMAU and PMAU; ensures that the register 
     -- is held at current value by decrementing by 1 and adding 1 as offset
@@ -1291,34 +1292,23 @@ begin
                 SH2SCmd                     <= "000";
                 SH2ALUCmd                   <= "00";
         
+            --  ==================================================================================================
+            -- MOV (Data Transfer)
+            --  ==================================================================================================
             elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
 
                 SetDefaultControlSignals; 
 
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Rn value
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Rm value                                               
-                SH2RegBSel  <= REG_ZEROTH_SEL;                                      --Default do not store anything at the rest of the register array
-                SH2RegAxIn  <= REG_LEN_ZEROES;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                -- Setting Reg Array control signals                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
+                SH2RegBSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
 
                 -- Setting address and data bus signals
+                SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
+                SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
+
                 -- TODO
         
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
             elsif std_match(NOP, InstructionReg) then
 
                 SetDefaultControlSignals;
@@ -1345,6 +1335,7 @@ begin
     SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
         SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
         SH2PC when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
+        RegArrayOutB when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_B_OUT else
             (others => 'Z');
 
     -- Make instruction reg combinational so that it updates immediately
