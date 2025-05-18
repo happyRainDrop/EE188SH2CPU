@@ -162,13 +162,15 @@ package SH2_CPU_Constants is
     constant DEFAULT_ALU_F_CMD : std_logic_vector(3 downto 0) := "1010";  --Use OpB for the Adder
     constant DEFAULT_ALU_CIN_CMD : std_logic_vector(1 downto 0) := "00";    --No Cin
     constant DEFAULT_ALU_S_CMD : std_logic_vector(2 downto 0) := "000";   --Doesn't matter the shift (output is not selected from ALU)
-    constant DEFAUL_ALU_CMD : std_logic_vector(1 downto 0) := "01";    --Select the Adder Output
+    constant DEFAUL_ALU_CMD : std_logic_vector(1 downto 0) := "00";    
     constant DEFAULT_ALU_IMM_OP : std_logic_vector(31 downto 0)  := (others => '0');   --All 0s
     constant DEFAULT_ALU_USE_IMM : std_logic := '0';     --By default, don't use the immediate value
 
     -- Misc constants
     constant REG_LEN_ZEROES : std_logic_vector(31 downto 0) := (others => '0');
     constant INSTR_LEN_ZEROES : std_logic_vector(15 downto 0) := (others => '0');
+    constant WRITE_TO_MEMORY : std_logic := '1';
+    constant NO_WRITE_TO_MEMORY : std_logic := '0';
    
 
 end SH2_CPU_Constants;
@@ -565,8 +567,16 @@ begin
                     
                     holdPC;
                     ------------------------------------------------ Update state
-                    if (Reset = '1') then CurrentState <= FETCH_IR;    -- CPU is enabled for the first time
-                    else CurrentState <= ZERO_CLK;                      -- CPU is still in reset mode (off)
+                    if (Reset = '1') then 
+                        CurrentState <= FETCH_IR;    -- CPU is enabled for the first time
+                        -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z.
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; 
+                        SH2SelDataBus <= HOLD_DATA_BUS;
+                    else 
+                        CurrentState <= ZERO_CLK;                      -- CPU is still in reset mode (off)
+                        -- For the next state: Set data, address buses to high impedance so that test bench can write them
+                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
                     end if;
 
                 when FETCH_IR => 
@@ -589,9 +599,12 @@ begin
                     else 
                         CurrentState <= FETCH_IR;
 
-                        if (WriteToMemory = '0') then 
+                        if (WriteToMemory = NO_WRITE_TO_MEMORY) then            -- Open data bus for next read-in
                             SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
                             SH2SelDataBus <= OPEN_DATA_BUS;
+                        else                                                    -- Add some STD_MATCH logic here later
+                            SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
+                            SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
                         end if;
 
                     end if;
@@ -623,22 +636,14 @@ begin
             -- Update select address and data bus signals
             case CurrentState is
                 when ZERO_CLK =>
-
-                    if (Reset = '1') then           -- Next state: FETCH_IR
-                        -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z.
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; 
-                        SH2SelDataBus <= HOLD_DATA_BUS;
-                
-                    else                            -- Next state: ZERO_CLK
-                        -- For the next state: Set data, address buses to high impedance so that test bench can write them
-                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                        SH2SelDataBus <= OPEN_DATA_BUS;
-                    end if;
-
+                    -- nothing to do
                 when FETCH_IR =>
 
-                    if (WriteToMemory = '1') then
+                    if (WriteToMemory = WRITE_TO_MEMORY) then
                         WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
+                        -- Open data bus for next read-in
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
                     end if;
                     
                 when others => -- halt the CPU
@@ -676,7 +681,7 @@ begin
             SH2RegA1Sel <= REG_ZEROTH_SEL;
             SH2RegA2Sel <= REG_ZEROTH_SEL;
 
-            -- Default ALU inputs
+            -- Default ALU inputs. Immediate is 0 and not used by default. Carry ins are also 0
             SH2Cin                    <= DEFAULT_ALU_CIN;
             SH2FCmd                   <= DEFAULT_ALU_F_CMD;
             SH2CinCmd                 <= DEFAULT_ALU_CIN_CMD;
@@ -694,223 +699,95 @@ begin
             DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
             DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
 
+            WriteToMemory <= NO_WRITE_TO_MEMORY;
+
         end procedure;
 
     begin
         if rising_edge(SH2clock) and CurrentState = FETCH_IR then
                 
+            SetDefaultControlSignals;
 
             --  ==================================================================================================
             -- ARITHMETIC
             -- ==================================================================================================
             if std_match(InstructionReg, ADD_imm_Rn) then
-                
-                SetDefaultControlSignals;
-                
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegBSel  <= REG_ZEROTH_SEL;                                      --Default do not store anything at the rest of the register array
-                SH2RegAxIn  <= REG_LEN_ZEROES;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1010";  --Use OpB for the Adder
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= '1';     --Use the immediate value
-                --Default
-                SH2Cin                      <= '0';     --No Cin
-                SH2SCmd                     <= "000";   --Doesn't matter the shift (output is not selected from ALU)
-                SH2CinCmd                   <= "00";    --No Cin
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
 
             elsif std_match(InstructionReg, ADD_Rm_Rn) then 
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_LEN_ZEROES;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1010";  --Use OpB for the Adder
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= '1';     --Use the immediate value
-                --Default
-                SH2Cin                      <= '0';     --No Cin
-                SH2SCmd                     <= "000";   --Doesn't matter the shift (output is not selected from ALU)
-                SH2CinCmd                   <= "00";    --No Cin
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
-
-                
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
+   
             elsif std_match(InstructionReg, ADDC_Rm_Rn) then 
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_LEN_ZEROES;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1010";  --Use OpB for the Adder
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= '1';     --Use the immediate value
-                --Default
-                SH2Cin                      <= '0';     --No Cin
-                SH2SCmd                     <= "000";   --Doesn't matter the shift (output is not selected from ALU)
-                SH2CinCmd                   <= "00";    --No Cin
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
-
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
             
             elsif std_match(InstructionReg, ADDV_Rm_Rn) then 
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_LEN_ZEROES;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1010";  --Use OpB for the Adder
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= '1';     --Use the immediate value
-                --Default
-                SH2Cin                      <= '0';     --No Cin
-                SH2SCmd                     <= "000";   --Doesn't matter the shift (output is not selected from ALU)
-                SH2CinCmd                   <= "00";    --No Cin
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
             
-                elsif std_match(InstructionReg, SUB_Rm_Rn) then 
+            elsif std_match(InstructionReg, SUB_Rm_Rn) then 
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_LEN_ZEROES;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1010";  --Use OpB for the Adder
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= '1';     --Use the immediate value
-                --Default
-                SH2Cin                      <= '0';     --No Cin
-                SH2SCmd                     <= "000";   --Doesn't matter the shift (output is not selected from ALU)
-                SH2CinCmd                   <= "00";    --No Cin
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
-
-                
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
+         
             elsif std_match(InstructionReg, SUBC_Rm_Rn) then 
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_LEN_ZEROES;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn    
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1010";  --Use OpB for the Adder
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= '1';     --Use the immediate value
-                --Default
-                SH2Cin                      <= '0';     --No Cin
-                SH2SCmd                     <= "000";   --Doesn't matter the shift (output is not selected from ALU)
-                SH2CinCmd                   <= "00";    --No Cin
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
 
             
             elsif std_match(InstructionReg, SUBV_Rm_Rn) then 
@@ -918,42 +795,19 @@ begin
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_LEN_ZEROES;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn     
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1010";  --Use OpB for the Adder
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= '1';     --Use the immediate value
-                --Default
-                SH2Cin                      <= '0';     --No Cin
-                SH2SCmd                     <= "000";   --Doesn't matter the shift (output is not selected from ALU)
-                SH2CinCmd                   <= "00";    --No Cin
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
 
             --  ==================================================================================================
             -- SHIFTS (0/8)
             --  ==================================================================================================
             elsif std_match(SHLL_Rn, InstructionReg) then
-                
-                SetDefaultControlSignals;
-                
+
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
@@ -963,10 +817,7 @@ begin
                 RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value    
-                --Default do not store anything at the rest of the register array        
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegAxStore <= REG_STORE;                                         --Update the value   
 
                 --Setting ALU control signals
                 SH2SCmd                     <= "000";   --Left shift left
@@ -976,17 +827,7 @@ begin
                 SH2FCmd                     <= "0000";
                 SH2CinCmd                   <= "00";
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
-                SH2ALUUseImmediateOperand   <= ALU_NO_IMM;     
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
+                SH2ALUUseImmediateOperand   <= ALU_NO_IMM;    
 
             elsif std_match(SHLR_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
@@ -998,10 +839,7 @@ begin
                 RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the low bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                                
-                --Default do not store anything at the rest of the register array                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegAxStore <= REG_STORE;                                         --Update the value 
 
                 --Setting ALU control signals
                 SH2SCmd                     <= "100";   --LSR
@@ -1012,16 +850,6 @@ begin
                 SH2CinCmd                   <= "00";
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
                 SH2ALUUseImmediateOperand   <= ALU_NO_IMM;     
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
             
             elsif std_match(SHAR_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
@@ -1033,10 +861,7 @@ begin
                 RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the first bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                               
-                --Default do not store anything at the rest of the register array                                            
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegAxStore <= REG_STORE;                                         --Update the value      
 
                 --Setting ALU control signals
                 SH2SCmd                     <= "101";   --ASR
@@ -1047,16 +872,6 @@ begin
                 SH2CinCmd                   <= "00";
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
                 SH2ALUUseImmediateOperand   <= ALU_NO_IMM;     
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
         
             elsif std_match(SHAL_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
@@ -1068,10 +883,7 @@ begin
                 RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                                 
-                --Default do not store anything at the rest of the register array                                            
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegAxStore <= REG_STORE;                                         --Update the value          
 
                 --Setting ALU control signals
                 SH2SCmd                     <= "000";   --LSL
@@ -1082,16 +894,6 @@ begin
                 SH2CinCmd                   <= "00";
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
                 SH2ALUUseImmediateOperand   <= ALU_NO_IMM;     
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
             
             elsif std_match(ROTCR_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
@@ -1103,10 +905,7 @@ begin
                 RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the first bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value   
-                --Default do not store anything at the rest of the register array                                            
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
+                SH2RegAxStore <= REG_STORE;                                         --Update the value
 
                 --Setting ALU control signals
                 SH2Cin                      <= RegArrayOutB(0); --Feed in T-bit into RRC
@@ -1117,16 +916,6 @@ begin
                 SH2CinCmd                   <= "00";
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
                 SH2ALUUseImmediateOperand   <= ALU_NO_IMM;     
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
 
             elsif std_match(ROTCL_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
@@ -1139,8 +928,6 @@ begin
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value  
-                --Default do not store anything at the rest of the register array                                           
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
                 SH2RegA2Sel <= REG_ZEROTH_SEL;
 
                 --Setting ALU control signals
@@ -1152,16 +939,6 @@ begin
                 SH2CinCmd                   <= "00";
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
                 SH2ALUUseImmediateOperand   <= ALU_NO_IMM;     
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
             
             elsif std_match(ROTR_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
@@ -1174,9 +951,6 @@ begin
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value   
-                --Default do not store anything at the rest of the register array                                           
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
 
                 --Setting ALU control signals
                 SH2SCmd                     <= "110";   --ROR
@@ -1187,16 +961,6 @@ begin
                 SH2CinCmd                   <= "00";
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
                 SH2ALUUseImmediateOperand   <= ALU_NO_IMM;     
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
         
             elsif std_match(ROTL_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
@@ -1208,12 +972,7 @@ begin
                 RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                              
-                --Default do not store anything at the rest of the register array                                             
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
-
-                --17th register status register
+                SH2RegAxStore <= REG_STORE;                                         --Update the value 
 
                 --Setting ALU control signals
                 SH2SCmd                     <= "010";   --ROL
@@ -1225,27 +984,14 @@ begin
                 SH2ALUImmediateOperand      <= ALU_ZERO_IMM;   
                 SH2ALUUseImmediateOperand   <= ALU_NO_IMM;     
 
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
             --  ==================================================================================================
             -- LOGICAL
             --  ==================================================================================================
             elsif std_match(AND_Rm_Rn, InstructionReg) then
                 
-                SetDefaultControlSignals;
-                
                 --Setting Reg Array control signals
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
                 SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore <= '0';
-                SH2RegAxStore <= '0';
 
                 --Setting ALU control signals
                 SH2Cin                      <= '0';
@@ -1254,24 +1000,14 @@ begin
                 SH2SCmd                     <= "000";
                 SH2ALUCmd                   <= "00";
 
-
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
             elsif std_match(AND_imm_R0, InstructionReg) then
                 
                 SetDefaultControlSignals;
                 
                 --Setting Reg Array control signals
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-                SH2RegStore <= '1';
-                SH2RegAxStore <= '0';
+                SH2RegStore <= REG_STORE;
+                SH2RegAxStore <= REG_NO_STORE;
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
                 SH2ALUUseImmediateOperand   <= '0';
 
@@ -1287,47 +1023,15 @@ begin
             --  ==================================================================================================
             elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
 
-                SetDefaultControlSignals; 
-
                 -- Setting Reg Array control signals                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
                 SH2RegBSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
-
-                -- Setting address and data bus signals
-                SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
-                SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
-
-                -- TODO
+                
+                WriteToMemory <= WRITE_TO_MEMORY;
         
             elsif std_match(NOP, InstructionReg) then
+                -- nothing, keep default values
 
-                SetDefaultControlSignals;
-
-                --Setting Reg Array control signals
-                --Default do not change the current values in the register array
-                SH2RegIn <= REG_LEN_ZEROES;                                           
-                SH2RegInSel <= REG_ZEROTH_SEL;   
-                SH2RegStore <= REG_NO_STORE;                                        
-                SH2RegASel  <= REG_ZEROTH_SEL;                                                  
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_LEN_ZEROES;
-                SH2RegAxInSel <= REG_ZEROTH_SEL;
-                SH2RegAxStore <= REG_NO_STORE;                                              
-                SH2RegA1Sel <= REG_ZEROTH_SEL;
-                SH2RegA2Sel <= REG_ZEROTH_SEL;
-
-                --Setting ALU control signals
-                --We don't care not going to store anything s/th/he/y does
-                
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
             else
                 --Setting Reg Array control signals
                 SH2RegStore <= '0';
