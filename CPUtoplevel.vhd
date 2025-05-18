@@ -118,7 +118,7 @@ package SH2_CPU_Constants is
     constant PMAU_NO_RESET         : std_logic := '1';     --Resets the PC value in the PMAU
     constant DEFAULT_SRC_SEL    : integer := 0;         --May change due to PC/GBR location moving
     constant DEFAULT_DEC_SEL    : std_logic := '1';     --Select decrement
-    constant DEFAULT_DEC_BIT    : integer := 0;         --Only 0th bit to modify
+    constant DEFAULT_BIT    : integer := 0;         --Only 0th bit to modify
     constant DEFAULT_POST_SEL   : std_logic := '1';     --Post decrement and preserve the initial value
     constant DEFAULT_OFFSET_SEL : integer := 4;         --Select immediate offset multiplied by 1
     constant DEFAULT_OFFSET_VAL : std_logic_vector(31 downto 0) := "00000000000000000000000000000001";    --Set the offset to be 1
@@ -135,6 +135,26 @@ package SH2_CPU_Constants is
     constant TWO_CLOCK      : std_logic_vector(31 downto 0) := "00000000000000000000000000000010";
     constant THREE_CLOCK    : std_logic_vector(31 downto 0) := "00000000000000000000000000000011";
     constant FOUR_CLOCK     : std_logic_vector(31 downto 0) := "00000000000000000000000000000100";
+
+    --ALU commands
+    --Will fill in more these are gonna take a long time ngl
+    constant ALU_USE_IMM    : std_logic := '1';
+    constant ALU_NO_IMM     : std_logic := '0';
+    --Unsure if these two ^ are right
+    constant ALU_CIN        : std_logic := '1';
+    constant ALU_NO_CIN     : std_logic := '0';
+ --   constant ALU_FB_SEL     : 
+ --   constant ALU_SHIFT_SEL  :
+ --   constant ALU_ADDER_SEL  :
+ --   constant
+
+    --Reg array default values
+    constant REG_ZEROS      : std_logic_vector(regLen - 1 downto 0) := "00000000000000000000000000000000";
+    constant REG_ZEROTH_SEL : integer := 0;
+    constant REG_STORE      : std_logic := '1';
+    constant REG_NO_STORE   : std_logic := '0';
+
+   
 
 end SH2_CPU_Constants;
 
@@ -522,7 +542,7 @@ begin
                     PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
                     SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
                     SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
-                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
+                    SH2PMAUIncDecBit        <= DEFAULT_BIT;
                     SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
 
                     ------------------------------------------------ Update state
@@ -541,7 +561,7 @@ begin
                         SH2SelDataBus <= OPEN_DATA_BUS;
                     end if;
 
-                when FETCH_IR =>
+                when FETCH_IR => 
 
                     -------------------------------------------------- Update the PC (so that it will change on rising edge of next clock)
                     SH2PMAUHold            <= PMAU_NO_RESET;
@@ -549,7 +569,7 @@ begin
                     -- PMAUImmediateSource  <= ClockCounter;
                     SH2PMAUOffsetSel        <= DEFAULT_NO_OFF_VAL;
                     SH2PMAUIncDecSel        <= DEFAULT_INC_SEL;
-                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
+                    SH2PMAUIncDecBit        <= DEFAULT_BIT;
                     SH2PMAUPrePostSel       <= DEFAULT_PRE_SEL;
 
                     SH2PC <= SH2PC_next;
@@ -582,7 +602,7 @@ begin
                     PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
                     SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
                     SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
-                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
+                    SH2PMAUIncDecBit        <= DEFAULT_BIT;
                     SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
 
                     -------------------------------------------------- Update state
@@ -600,7 +620,7 @@ begin
                     PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
                     SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
                     SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
-                    SH2PMAUIncDecBit        <= DEFAULT_DEC_BIT;
+                    SH2PMAUIncDecBit        <= DEFAULT_BIT;
                     SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
 
                     --Do nothing
@@ -676,25 +696,37 @@ begin
             -- report "IR     = " & to_hstring(InstructionReg);
             -- report "ADDIMM = " & to_hstring(ADD_imm_Rn);
             if std_match(InstructionReg, ADD_imm_Rn) then
-                report "YIPPEEEEEEEEEEEEEEEE";
                 -- Setting Reg Array control signals
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8))); -- OpA of ALU comes out of RegArray
-                SH2RegStore <= '1';
-                SH2RegAxStore <= '0';
+                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;                                           --Actually write
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
+                --Default do not store anything at the rest of the register array
+                SH2RegBSel  <= REG_ZEROTH_SEL;      
+                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegAxInSel <= REG_ZEROTH_SEL;
+                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegA1Sel <= REG_ZEROTH_SEL;
+                SH2RegA2Sel <= REG_ZEROTH_SEL;
 
-                SH2RegIn <= SH2ALUResult;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore <= '1';
-                
                 --Setting ALU control signals
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= '1';
-                SH2Cin                      <= '0';     --Could probably use "else" case to reassign the default values, as some of these are only set in specific commands
-                SH2FCmd                     <= "1010";
-                SH2CinCmd                   <= "00";
-                SH2SCmd                     <= "000";   --Doesn't matter what this does, not selecting the output
-                SH2ALUCmd                   <= "01";   
-                       
+                SH2Cin                      <= '0';     --No Cin
+                SH2FCmd                     <= "1010";  --Use OpB for the Adder
+                SH2CinCmd                   <= "00";    --No Cin
+                SH2SCmd                     <= "000";   --Doesn't matter the shift (output is not selected from ALU)
+                SH2ALUCmd                   <= "01";    --Select the Adder Output
+                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
+                SH2ALUUseImmediateOperand   <= '1';     --Use the immediate value
+
+                --Setting DMAU control signals
+                --Default no incrementing values in DMAU settings
+                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
+                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
+                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
+                SH2DMAUIncDecBit    <= DEFAULT_BIT;
+                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
+                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
+                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
 
             elsif std_match(SHLL_Rn, InstructionReg) then
                 --Setting Reg Array control signals
