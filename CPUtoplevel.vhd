@@ -671,17 +671,20 @@ begin
     --at the end of the matches -> update the currentstate with nextState variable
     matchInstruction : process(SH2clock)
     begin
-        if rising_edge(SH2clock) then
+        if rising_edge(SH2clock) and CurrentState = FETCH_IR then
                 
             -- report "IR     = " & to_hstring(InstructionReg);
             -- report "ADDIMM = " & to_hstring(ADD_imm_Rn);
             if std_match(InstructionReg, ADD_imm_Rn) then
                 report "YIPPEEEEEEEEEEEEEEEE";
-                --Setting Reg Array control signals: Want the operand to come out on Reg A
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                -- Setting Reg Array control signals
+                SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8))); -- OpA of ALU comes out of RegArray
                 SH2RegStore <= '1';
                 SH2RegAxStore <= '0';
+
+                SH2RegIn <= SH2ALUResult;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegStore <= '1';
                 
                 --Setting ALU control signals
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
