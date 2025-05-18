@@ -807,7 +807,6 @@ begin
                 SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
                 DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
                 DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
-
             
             elsif std_match(InstructionReg, ADDV_Rm_Rn) then 
                 -- Setting Reg Array control signals
