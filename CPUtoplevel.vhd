@@ -149,11 +149,23 @@ package SH2_CPU_Constants is
  --   constant
 
     --Reg array default values
-    constant REG_ZEROS      : std_logic_vector(regLen - 1 downto 0) := "00000000000000000000000000000000";
     constant REG_ZEROTH_SEL : integer := 0;
     constant REG_STORE      : std_logic := '1';
     constant REG_NO_STORE   : std_logic := '0';
 
+    -- ALU default values (not too important; 
+    --                     ALU can do whatever it wants so long as it doesn't update address or data bus)
+    constant DEFAULT_ALU_CIN : std_logic := '0';     --No Cin
+    constant DEFAULT_ALU_F_CMD : std_logic_vector(3 downto 0) := "1010";  --Use OpB for the Adder
+    constant DEFAULT_ALU_CIN_CMD : std_logic_vector(1 downto 0) := "00";    --No Cin
+    constant DEFAULT_ALU_S_CMD : std_logic_vector(2 downto 0) := "000";   --Doesn't matter the shift (output is not selected from ALU)
+    constant DEFAUL_ALU_CMD : std_logic_vector(1 downto 0) := "01";    --Select the Adder Output
+    constant DEFAULT_ALU_IMM_OP : std_logic_vector(31 downto 0)  := (others => '0');   --All 0s
+    constant DEFAULT_ALU_USE_IMM : std_logic := '0';     --By default, don't use the immediate value
+
+    -- Misc constants
+    constant REG_LEN_ZEROES : std_logic_vector(31 downto 0) := (others => '0');
+    constant INSTR_LEN_ZEROES : std_logic_vector(15 downto 0) := (others => '0');
    
 
 end SH2_CPU_Constants;
@@ -340,11 +352,6 @@ end CPUtoplevel;
  
 architecture Structural of CPUtoplevel is
 
-    -- Constants --
-    --====================================================================================================================
-    constant REG_LEN_ZEROES : std_logic_vector(regLen-1 downto 0) := (others => '0');
-    constant INSTR_LEN_ZEROES : std_logic_vector(instrLen-1 downto 0) := (others => '0');
-
     -- Control Signals --
     --==================================================================================================================================================
     ------------------------------------------------------------------------------------------------------------------
@@ -434,10 +441,7 @@ architecture Structural of CPUtoplevel is
     signal InstructionReg   : std_logic_vector(instrLen - 1 downto 0) := (others => 'Z'); -- IR
     signal ClockCounter     : std_logic_vector(regLen - 1 downto 0); -- what clock cycle are we on?
 
-    attribute keep : boolean;
-    attribute keep of SH2SelAddressBus : signal is true;
-    attribute keep of SH2SelDataBus : signal is true;
-    attribute keep of InstructionReg : signal is true;
+    signal WriteToMemory : std_logic := '0';  -- active high
 
 begin
 
@@ -563,6 +567,11 @@ begin
 
                 when FETCH_IR => 
 
+                    -------------------------------------------------- Update the IR
+
+                    RE0 <= '0'; RE1 <= '0'; RE2 <= '1'; RE3 <= '1';  -- Read low bytes in (instructions stored in low bytes)
+                    ClockCounter            <= ONE_CLOCK;       --Set clock counter back to 1
+
                     -------------------------------------------------- Update the PC (so that it will change on rising edge of next clock)
                     SH2PMAUHold            <= PMAU_NO_RESET;
                     SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
@@ -572,7 +581,7 @@ begin
                     SH2PMAUIncDecBit        <= DEFAULT_BIT;
                     SH2PMAUPrePostSel       <= DEFAULT_PRE_SEL;
 
-                    SH2PC <= SH2PC_next;
+                    SH2PC <= SH2PC_next; 
 
                     ------------------------------------------------ Set next state
                     if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
@@ -586,13 +595,14 @@ begin
                     else 
                         CurrentState <= FETCH_IR;
 
-                        -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                        SH2SelDataBus <= HOLD_DATA_BUS;
+                        if (WriteToMemory = '0') then 
+                            SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                            SH2SelDataBus <= OPEN_DATA_BUS;
+                        end if;
 
                     end if;
                     
-                when END_OF_FILE =>
+                when others =>  -- End of File or invalid state
                     
                     -------------------------------------------------- Setting control signals 
 
@@ -612,24 +622,8 @@ begin
                     SH2SelAddressBus <= OPEN_ADDRESS_BUS;
                     SH2SelDataBus <= OPEN_DATA_BUS; 
 
-                when others =>
-                    --Should not get here
-                    --But if it does, do not update the PC
-                    SH2PMAUHold            <= PMAU_RESET;
-                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
-                    PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
-                    SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
-                    SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
-                    SH2PMAUIncDecBit        <= DEFAULT_BIT;
-                    SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
-
-                    --Do nothing
                     InstructionReg <= NOP;
 
-                    -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z
-                    SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                    SH2SelDataBus <= OPEN_DATA_BUS; 
-                    
             end case;
 
             if (Reset = '0') then 
@@ -648,6 +642,12 @@ begin
                 --Read enabled for RAM dumping
                 --Write remains disabled for RAM dumping
         if falling_edge(SH2clock) then
+
+            -- By default, don't read or write.
+            WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
+            RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; 
+
+
             case CurrentState is
                 when ZERO_CLK =>
 
@@ -655,27 +655,12 @@ begin
 
                 when FETCH_IR =>
 
-                    ------------------------------------------------ Setting control signals
-
-                    --Set clock counter back to 1
-                    ClockCounter            <= ONE_CLOCK;
-
-                     ---------------------------------------------------------- Fetch the next instruction
-                    
-                    -- Read low bytes in (instructions stored in low bytes), write disable
-                    WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
-                    RE0 <= '0'; RE1 <= '0'; RE2 <= '1'; RE3 <= '1';  
-
-                    -- Now, for the rising edge of the clock, need to hold data bus.
-                    SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                    SH2SelDataBus <= OPEN_DATA_BUS;
+                    if (WriteToMemory = '1') then
+                        WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
+                    end if;
                     
                 when others => -- halt the CPU
-
-                    -- Do not read, write, or carry out any instructions
                     InstructionReg <= NOP;
-                    WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
-                    RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; 
                     
             end case;
         end if;
@@ -690,20 +675,61 @@ begin
     --Matches the 
     --at the end of the matches -> update the currentstate with nextState variable
     matchInstruction : process(SH2clock)
+
+        -- Set default instruction-specific control signals
+        -- Does not include PMAU and address/data bus setting logic, because that is determined
+        -- by the state machine
+        procedure SetDefaultControlSignals is
+        begin
+            -- Default RegArray inputs: Do not input any registers, 
+            -- only put Reg0 on output buses
+            SH2RegIn <= REG_LEN_ZEROES; 
+            SH2RegInSel <= REG_ZEROTH_SEL; 
+            SH2RegStore <= REG_NO_STORE;   
+            SH2RegASel  <= REG_ZEROTH_SEL;                                      
+            SH2RegBSel  <= REG_ZEROTH_SEL;                      
+            SH2RegAxIn  <= REG_LEN_ZEROES;
+            SH2RegAxInSel <= REG_ZEROTH_SEL;
+            SH2RegAxStore <= REG_NO_STORE;                                              
+            SH2RegA1Sel <= REG_ZEROTH_SEL;
+            SH2RegA2Sel <= REG_ZEROTH_SEL;
+
+            -- Default ALU inputs
+            SH2Cin                    <= DEFAULT_ALU_CIN;
+            SH2FCmd                   <= DEFAULT_ALU_F_CMD;
+            SH2CinCmd                 <= DEFAULT_ALU_CIN_CMD;
+            SH2SCmd                   <= DEFAULT_ALU_S_CMD;
+            SH2ALUCmd                 <= DEFAUL_ALU_CMD;
+            SH2ALUImmediateOperand    <= DEFAULT_ALU_IMM_OP;
+            SH2ALUUseImmediateOperand <= DEFAULT_ALU_USE_IMM;
+
+            -- Default DMAU inputs
+            SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
+            SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
+            SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
+            SH2DMAUIncDecBit    <= DEFAULT_BIT;
+            SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
+            DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
+            DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
+
+        end procedure;
+
     begin
         if rising_edge(SH2clock) and CurrentState = FETCH_IR then
                 
             -- report "IR     = " & to_hstring(InstructionReg);
             -- report "ADDIMM = " & to_hstring(ADD_imm_Rn);
             if std_match(InstructionReg, ADD_imm_Rn) then
+                
+                SetDefaultControlSignals;
+                
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                --Default do not store anything at the rest of the register array
-                SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegBSel  <= REG_ZEROTH_SEL;                                      --Default do not store anything at the rest of the register array
+                SH2RegAxIn  <= REG_LEN_ZEROES;
                 SH2RegAxInSel <= REG_ZEROTH_SEL;
                 SH2RegAxStore <= REG_NO_STORE;                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -718,17 +744,10 @@ begin
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
                 SH2ALUUseImmediateOperand   <= '1';     --Use the immediate value
 
-                --Setting DMAU control signals
-                --Default no incrementing values in DMAU settings
-                SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-                SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-                SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-                SH2DMAUIncDecBit    <= DEFAULT_BIT;
-                SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-                DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-                DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
-
             elsif std_match(SHLL_Rn, InstructionReg) then
+                
+                SetDefaultControlSignals;
+                
                 --Setting Reg Array control signals
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
                 SH2RegStore <= '0';
@@ -742,6 +761,9 @@ begin
                 SH2ALUCmd                   <= "10";
                 
             elsif std_match(AND_Rm_Rn, InstructionReg) then
+                
+                SetDefaultControlSignals;
+                
                 --Setting Reg Array control signals
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
                 SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
@@ -756,6 +778,9 @@ begin
                 SH2ALUCmd                   <= "00";
 
             elsif std_match(AND_imm_R0, InstructionReg) then
+                
+                SetDefaultControlSignals;
+                
                 --Setting Reg Array control signals
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
                 SH2RegStore <= '1';
@@ -770,7 +795,29 @@ begin
                 SH2SCmd                     <= "000";
                 SH2ALUCmd                   <= "00";
         
+            elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
+
+                SetDefaultControlSignals; 
+
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Rn value
+                SH2RegStore <= REG_STORE;                                           --Actually write
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Rm value                                               
+                SH2RegBSel  <= REG_ZEROTH_SEL;                                      --Default do not store anything at the rest of the register array
+                SH2RegAxIn  <= REG_LEN_ZEROES;
+                SH2RegAxInSel <= REG_ZEROTH_SEL;
+                SH2RegAxStore <= REG_NO_STORE;                                              
+                SH2RegA1Sel <= REG_ZEROTH_SEL;
+                SH2RegA2Sel <= REG_ZEROTH_SEL;
+
+                -- Setting address and data bus signals
+                -- TODO
+
             elsif std_match(NOP, InstructionReg) then
+
+                SetDefaultControlSignals;
+
                 --Setting Reg Array control signals
                 SH2RegStore <= '0';
                 SH2RegAxStore <= '0';

@@ -65,7 +65,7 @@ architecture  behavioral  of  SH2RegArray  is
 
 	component  RegArray
         generic (
-            regcnt   : integer := regCount;    -- default number of registers is 21: 16 general registers, 
+            regcnt   : integer := regCount;    -- default number of registers is 18: 16 general registers, 
             -- 2 more registers for PR, SR
             wordsize : integer := regLen     -- default width is 32-bits (each register is 32 bits long)
         );
