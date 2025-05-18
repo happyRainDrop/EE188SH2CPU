@@ -677,16 +677,16 @@ begin
             -- report "ADDIMM = " & to_hstring(ADD_imm_Rn);
             if std_match(InstructionReg, ADD_imm_Rn) then
                 report "YIPPEEEEEEEEEEEEEEEE";
-                --Setting Reg Array control signals
+                --Setting Reg Array control signals: Want the operand to come out on Reg A
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore <= '1';
+                SH2RegStore <= '0';
                 SH2RegAxStore <= '0';
                 
                 --Setting ALU control signals
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= '0';
+                SH2ALUUseImmediateOperand   <= '1';
                 SH2Cin                      <= '0';     --Could probably use "else" case to reassign the default values, as some of these are only set in specific commands
-                SH2FCmd                     <= "0000";
+                SH2FCmd                     <= "1010";
                 SH2CinCmd                   <= "00";
                 SH2SCmd                     <= "000";   --Doesn't matter what this does, not selecting the output
                 SH2ALUCmd                   <= "01";   

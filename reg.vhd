@@ -16,6 +16,7 @@
 --     25 Jan 21  Glen George       Initial revision.
 --     11 Apr 25  Glen George       Added separate address register interface.
 --
+--     17 May 25  Ruth Berkun       Do not initialize as undefined!
 ----------------------------------------------------------------------------
 
 
@@ -99,7 +100,7 @@ architecture  behavioral  of  RegArray  is
     type  RegType  is array (regcnt - 1 downto 0) of
                       std_logic_vector(wordsize - 1 downto 0);
 
-    signal  Registers : RegType;                -- the register array
+    signal  Registers : RegType := (others => (others => '0'));                -- the register array
 
     -- aliases for the upper and lower input word
     alias  RegDInHigh : std_logic_vector(wordsize - 1 downto 0) IS
