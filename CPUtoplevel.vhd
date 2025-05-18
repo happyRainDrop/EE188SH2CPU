@@ -115,8 +115,8 @@ package SH2_CPU_Constants is
 
     -- Holding settings for DMAU and PMAU; ensures that the register 
     -- is held at current value by decrementing by 1 and adding 1 as offset
-    constant PMAU_RESET         : std_logic := '0';     --Resets the PC value in the PMAU
-    constant PMAU_NO_RESET         : std_logic := '1';     --Resets the PC value in the PMAU
+    constant PMAU_HOLD         : std_logic := '0';     --Holds the PC value in the PMAU
+    constant PMAU_NO_HOLD         : std_logic := '1';     --Does not hold the PC value in the PMAU
     constant DEFAULT_SRC_SEL    : integer := 0;         --May change due to PC/GBR location moving
     constant DEFAULT_DEC_SEL    : std_logic := '1';     --Select decrement
     constant DEFAULT_BIT    : integer := 0;         --Only 0th bit to modify
@@ -522,69 +522,60 @@ begin
     
     -- ================================================================================================== Finite State Machine
     updatePCandIRandSetNextState: process(SH2clock)
+        --========================================================== Procedures
+        procedure holdPC is
+        begin
+            SH2PMAUHold            <= PMAU_HOLD;
+            SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
+            PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
+            SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
+            SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
+            SH2PMAUIncDecBit        <= DEFAULT_BIT;
+            SH2PMAUPrePostSel       <= DEFAULT_POST_SEL; 
+        end procedure;
+
+        procedure incPC is 
+        begin
+            SH2PMAUHold            <= PMAU_NO_HOLD;
+            SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
+            SH2PMAUOffsetSel        <= DEFAULT_NO_OFF_VAL;
+            SH2PMAUIncDecSel        <= DEFAULT_INC_SEL;
+            SH2PMAUIncDecBit        <= DEFAULT_BIT;
+            SH2PMAUPrePostSel       <= DEFAULT_PRE_SEL;
+            SH2PC <= SH2PC_next; 
+        end procedure;
+
+        procedure disableReadWrite is
+        begin
+            WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
+            RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1';
+        end procedure;
+
     begin
-        --On the rising edge of the CurrentState, perform state-specific tasks
-            --ZERO_CLK
-                --Stop the PC
-                --Fetch the instruction
-            --FETCH_IR
-                --Update the PC
-                --Get next instruction while executing current instruction
-            --END_OF_FILE
-                --Stop the PC
+    
+        -- Rising edge: Update state, load PC, load IR
+        --=====================================================================================
         if rising_edge(SH2clock) then
 
-            -- Reset reading or writing when clock is high
-            WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
-            RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; 
+           disableReadWrite;
 
             -- Update state on rising edge
             case CurrentState is 
                 when ZERO_CLK =>
-                    ------------------------------------------------ Setting control signals
-
-                    --Setting PMAU control signals
-                    SH2PMAUHold            <= PMAU_RESET;
-                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
-                    PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
-                    SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
-                    SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
-                    SH2PMAUIncDecBit        <= DEFAULT_BIT;
-                    SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
-
+                    
+                    holdPC;
                     ------------------------------------------------ Update state
-                    if (Reset = '1') then           -- Reset is active low, so '1' means we're not reset
-                        CurrentState <= FETCH_IR;
-
-                        -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z.
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; 
-                        SH2SelDataBus <= HOLD_DATA_BUS;
-                        
-                    else 
-                        CurrentState <= ZERO_CLK;   -- We are resetting
-
-                        -- For the next state: Set data, address buses to high impedance so that test bench can write them
-                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                        SH2SelDataBus <= OPEN_DATA_BUS;
+                    if (Reset = '1') then CurrentState <= FETCH_IR;    -- CPU is enabled for the first time
+                    else CurrentState <= ZERO_CLK;                      -- CPU is still in reset mode (off)
                     end if;
 
                 when FETCH_IR => 
 
-                    -------------------------------------------------- Update the IR
+                    -------------------------------------------------- Update the IR, clock cycle, and PC
 
                     RE0 <= '0'; RE1 <= '0'; RE2 <= '1'; RE3 <= '1';  -- Read low bytes in (instructions stored in low bytes)
                     ClockCounter            <= ONE_CLOCK;       --Set clock counter back to 1
-
-                    -------------------------------------------------- Update the PC (so that it will change on rising edge of next clock)
-                    SH2PMAUHold            <= PMAU_NO_RESET;
-                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
-                    -- PMAUImmediateSource  <= ClockCounter;
-                    SH2PMAUOffsetSel        <= DEFAULT_NO_OFF_VAL;
-                    SH2PMAUIncDecSel        <= DEFAULT_INC_SEL;
-                    SH2PMAUIncDecBit        <= DEFAULT_BIT;
-                    SH2PMAUPrePostSel       <= DEFAULT_PRE_SEL;
-
-                    SH2PC <= SH2PC_next; 
+                    incPC;
 
                     ------------------------------------------------ Set next state
                     if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
@@ -607,25 +598,13 @@ begin
                     
                 when others =>  -- End of File or invalid state
                     
-                    -------------------------------------------------- Setting control signals 
-
-                    --Setting PMAU control signals
-                    SH2PMAUHold            <= PMAU_RESET;
-                    SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
-                    PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
-                    SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
-                    SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
-                    SH2PMAUIncDecBit        <= DEFAULT_BIT;
-                    SH2PMAUPrePostSel       <= DEFAULT_POST_SEL;
-
-                    -------------------------------------------------- Update state
+                    holdPC;
                     CurrentState <= END_OF_FILE;
+                    InstructionReg <= NOP;
 
                     -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z
                     SH2SelAddressBus <= OPEN_ADDRESS_BUS;
                     SH2SelDataBus <= OPEN_DATA_BUS; 
-
-                    InstructionReg <= NOP;
 
             end case;
 
@@ -634,27 +613,27 @@ begin
             end if;
 
         end if;
-        --On the falling edge of the clock, update Read and Write for correct RAM interaction based on state
-            --ZERO_CLK
-                --Read enabled for fetching first instruction
-                --Write disabled, busy fetching instruction
-            --FETCH_IR
-                --Read enabled for fetching next instruction
-                --Write disabled, busy fetching next instruction
-            --END_OF_FILE
-                --Read enabled for RAM dumping
-                --Write remains disabled for RAM dumping
+
+        -- Falling edge: Update select address and data bus signals (after they were set by InstrMatch on rising edge)
+        --=====================================================================================
         if falling_edge(SH2clock) then
 
-            -- By default, don't read or write.
-            WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
-            RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1'; 
+            disableReadWrite;
 
-
+            -- Update select address and data bus signals
             case CurrentState is
                 when ZERO_CLK =>
 
-                    -- do nothing.
+                    if (Reset = '1') then           -- Next state: FETCH_IR
+                        -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z.
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; 
+                        SH2SelDataBus <= HOLD_DATA_BUS;
+                
+                    else                            -- Next state: ZERO_CLK
+                        -- For the next state: Set data, address buses to high impedance so that test bench can write them
+                        SH2SelAddressBus <= OPEN_ADDRESS_BUS;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
+                    end if;
 
                 when FETCH_IR =>
 
@@ -768,7 +747,7 @@ begin
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
                 --Default do not store anything at the rest of the register array
                 SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegAxIn  <= REG_LEN_ZEROES;
                 SH2RegAxInSel <= REG_ZEROTH_SEL;
                 SH2RegAxStore <= REG_NO_STORE;                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -803,7 +782,7 @@ begin
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
                 --Default do not store anything at the rest of the register array
                 SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegAxIn  <= REG_LEN_ZEROES;
                 SH2RegAxInSel <= REG_ZEROTH_SEL;
                 SH2RegAxStore <= REG_NO_STORE;                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -838,7 +817,7 @@ begin
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
                 --Default do not store anything at the rest of the register array
                 SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegAxIn  <= REG_LEN_ZEROES;
                 SH2RegAxInSel <= REG_ZEROTH_SEL;
                 SH2RegAxStore <= REG_NO_STORE;                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -872,7 +851,7 @@ begin
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
                 --Default do not store anything at the rest of the register array
                 SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegAxIn  <= REG_LEN_ZEROES;
                 SH2RegAxInSel <= REG_ZEROTH_SEL;
                 SH2RegAxStore <= REG_NO_STORE;                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -907,7 +886,7 @@ begin
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
                 --Default do not store anything at the rest of the register array
                 SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegAxIn  <= REG_LEN_ZEROES;
                 SH2RegAxInSel <= REG_ZEROTH_SEL;
                 SH2RegAxStore <= REG_NO_STORE;                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -942,7 +921,7 @@ begin
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
                 --Default do not store anything at the rest of the register array
                 SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegAxIn  <= REG_LEN_ZEROES;
                 SH2RegAxInSel <= REG_ZEROTH_SEL;
                 SH2RegAxStore <= REG_NO_STORE;                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -980,10 +959,10 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
-                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1)                         --Update the T-bit with the high bit value of Rn
+                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value    
                 --Default do not store anything at the rest of the register array        
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -1015,10 +994,10 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn   
-                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(0)                                  --Update the T-bit with the low bit value of Rn
+                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the low bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value                                                
                 --Default do not store anything at the rest of the register array                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -1050,10 +1029,10 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn    
-                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(0)                                  --Update the T-bit with the first bit value of Rn
+                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the first bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value                                               
                 --Default do not store anything at the rest of the register array                                            
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -1085,10 +1064,10 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
-                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1)                         --Update the T-bit with the high bit value of Rn
+                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value                                                 
                 --Default do not store anything at the rest of the register array                                            
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -1120,10 +1099,10 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(0)                                  --Update the T-bit with the first bit value of Rn
+                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the first bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value   
                 --Default do not store anything at the rest of the register array                                            
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -1155,10 +1134,10 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1)                         --Update the T-bit with the high bit value of Rn
+                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value  
                 --Default do not store anything at the rest of the register array                                           
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -1190,10 +1169,10 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(0)                                  --Update the T-bit with the first bit value of Rn
+                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the first bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value   
                 --Default do not store anything at the rest of the register array                                           
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -1225,10 +1204,10 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn     
-                SH2RegBSel  <= SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1)                         --Update the T-bit with the high bit value of Rn
+                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
+                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
                 SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= SR;                                                --Write back at the Status Register index
+                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value                                              
                 --Default do not store anything at the rest of the register array                                             
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
@@ -1326,12 +1305,12 @@ begin
 
                 --Setting Reg Array control signals
                 --Default do not change the current values in the register array
-                SH2RegIn <= REG_ZEROS;                                           
+                SH2RegIn <= REG_LEN_ZEROES;                                           
                 SH2RegInSel <= REG_ZEROTH_SEL;   
                 SH2RegStore <= REG_NO_STORE;                                        
                 SH2RegASel  <= REG_ZEROTH_SEL;                                                  
                 SH2RegBSel  <= REG_ZEROTH_SEL;      
-                SH2RegAxIn  <= REG_ZEROS;
+                SH2RegAxIn  <= REG_LEN_ZEROES;
                 SH2RegAxInSel <= REG_ZEROTH_SEL;
                 SH2RegAxStore <= REG_NO_STORE;                                              
                 SH2RegA1Sel <= REG_ZEROTH_SEL;
