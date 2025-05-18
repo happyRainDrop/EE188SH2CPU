@@ -90,11 +90,11 @@ package SH2_CPU_Constants is
     constant PMAU_OFFSET_SEL_IMM_OFFSET_x4 : integer := 6;
 
     -- Flag bit positions (useful for flag bus indexing)
-    constant FLAG_INDE-_CARRYOUT     : integer := 4;
-    constant FLAG_INDE-_HALF_CARRY   : integer := 3;
-    constant FLAG_INDE-_OVERFLOW     : integer := 2;
-    constant FLAG_INDE-_ZERO         : integer := 1;
-    constant FLAG_INDE-_SIGN         : integer := 0;
+    constant FLAG_INDEX_CARRYOUT     : integer := 4;
+    constant FLAG_INDEX_HALF_CARRY   : integer := 3;
+    constant FLAG_INDEX_OVERFLOW     : integer := 2;
+    constant FLAG_INDEX_ZERO         : integer := 1;
+    constant FLAG_INDEX_SIGN         : integer := 0;
 
     -- Special register indices
     constant REG_PR            : integer := 16;
@@ -175,10 +175,10 @@ package SH2_IR_Constants is
     --constant DMULS_L_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1101";
     --constant DMULU_L_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------0101";
     constant DT_Rn : std_logic_vector(15 downto 0) := "0100----00010000";
-    constant E-TS_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1110";
-    constant E-TS_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1111";
-    constant E-TU_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1100";
-    constant E-TU_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1101";
+    constant EXTS_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1110";
+    constant EXTS_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1111";
+    constant EXTU_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1100";
+    constant EXTU_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1101";
     constant JMP_Rm : std_logic_vector(15 downto 0) := "0100----00101011";
     constant JSR_Rm : std_logic_vector(15 downto 0) := "0100----00001011";
     constant LDC_Rm_SR : std_logic_vector(15 downto 0) := "0100----00001110";
@@ -278,10 +278,10 @@ package SH2_IR_Constants is
     constant TST_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1000";
     constant TST_imm_R0 : std_logic_vector(15 downto 0) := "11001000--------";
     constant TST_B_imm_GBR : std_logic_vector(15 downto 0) := "11001100--------";
-    constant -TRCT_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1101";
-    constant -OR_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1010";
-    constant -OR_imm_R0 : std_logic_vector(15 downto 0) := "11001010--------";
-    constant -OR_B_imm_GBR : std_logic_vector(15 downto 0) := "11001110--------";
+    constant XTRCT_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1101";
+    constant XOR_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1010";
+    constant XOR_imm_R0 : std_logic_vector(15 downto 0) := "11001010--------";
+    constant XOR_B_imm_GBR : std_logic_vector(15 downto 0) := "11001110--------";
 end SH2_IR_Constants;
 
 library ieee;
