@@ -718,12 +718,15 @@ begin
             DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
             DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
 
-            -- WriteToMemory <= NO_WRITE_TO_MEMORY;
+            WriteToMemory <= NO_WRITE_TO_MEMORY;
 
         end procedure;
 
+        variable SH2IntermediateResult : std_logic_vector(regLen - 1 downto 0);
+
     begin
         if rising_edge(SH2clock) and CurrentState = FETCH_IR then
+            report "InstructionReg = x""" & to_hstring(InstructionReg) & """";
             --Default all the units
             SetDefaultControlSignals;
 
@@ -738,7 +741,8 @@ begin
                 -- report "Immediate value = x""" & to_hstring((23 downto 0 => '0') & InstructionReg(7 downto 0)) & """";
 
                 -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2IntermediateResult := SH2ALUResult;
+                SH2RegIn <= SH2IntermediateResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
@@ -1094,6 +1098,8 @@ begin
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
                 SH2RegBSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
 
+                WriteToMemory <= WRITE_TO_MEMORY;
+
             elsif std_match(NOP, InstructionReg) then
 
                 SetDefaultControlSignals;
@@ -1125,6 +1131,6 @@ begin
                     when SH2Clock = '1'
                     else InstructionReg;
 
-    WriteToMemory <= WRITE_TO_MEMORY when std_match(MOVB_Rm_TO_atRn, InstructionReg) else NO_WRITE_TO_MEMORY;
+    -- WriteToMemory <= WRITE_TO_MEMORY when std_match(MOVB_Rm_TO_atRn, InstructionReg) else NO_WRITE_TO_MEMORY;
 
 end Structural;

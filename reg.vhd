@@ -17,6 +17,7 @@
 --     11 Apr 25  Glen George       Added separate address register interface.
 --
 --     17 May 25  Ruth Berkun       Do not initialize as undefined!
+--     10 June 25 Ruth Berkun       Test combination logic for regs instead of writing on the clock
 ----------------------------------------------------------------------------
 
 
@@ -94,58 +95,53 @@ entity  RegArray  is
 
 end  RegArray;
 
+architecture behavioral of RegArray is
 
-architecture  behavioral  of  RegArray  is
+    type RegType is array (regcnt - 1 downto 0) of
+        std_logic_vector(wordsize - 1 downto 0);
 
-    type  RegType  is array (regcnt - 1 downto 0) of
-                      std_logic_vector(wordsize - 1 downto 0);
+    signal Registers : RegType := (others => (others => '0'));
 
-    signal  Registers : RegType := (others => (others => '0'));                -- the register array
-
-    -- aliases for the upper and lower input word
-    alias  RegDInHigh : std_logic_vector(wordsize - 1 downto 0) IS
-                        RegDIn(2 * wordsize - 1 downto wordsize);
-    alias  RegDInLow  : std_logic_vector(wordsize - 1 downto 0) IS
-                        RegDIn(wordsize - 1 downto 0);
+    alias RegDInHigh : std_logic_vector(wordsize - 1 downto 0) is
+        RegDIn(2 * wordsize - 1 downto wordsize);
+    alias RegDInLow  : std_logic_vector(wordsize - 1 downto 0) is
+        RegDIn(wordsize - 1 downto 0);
 
 begin
 
-    -- setup the outputs - choose based on select signals
-    RegA   <=  Registers(RegASel);
-    RegB   <=  Registers(RegBSel);
-    RegA1  <=  Registers(RegA1Sel);
-    RegA2  <=  Registers(RegA2Sel);
-    RegD   <=  Registers(2 * RegDSel + 1) & Registers(2 * RegDSel);
-
-
-    -- only write registers on the clock
-    process(clock)
+    -- Combinational write logic (priority: RegStore > RegAxStore > RegDStore)
+    process (RegInSel, RegIn, RegStore,
+             RegAxInSel, RegAxIn, RegAxStore,
+             RegDInSel, RegDInLow, RegDInHigh, RegDStore,
+             Registers)
+        variable next_registers : RegType := Registers;
     begin
 
-        -- by default leave all registers with their current value
-        Registers  <=  Registers;
-
-        -- if storing, update that register on the clock
-        if  rising_edge(clock)  then
-
-            -- handle double word stores
-            if (RegDStore = '1')  then
-                Registers(2 * RegDInSel + 1)  <=  RegDInHigh;
-                Registers(2 * RegDInSel)      <=  RegDInLow;
-            end if;
-
-            -- handle address register stores second so they take precedence
-            --    over double word stores
-            if (RegAxStore = '1')  then
-                Registers(RegAxInSel)  <=  RegAxIn;
-            end if;
-
-            -- handle normal stores last so they have highest precedence
-            if (RegStore = '1')  then
-                Registers(RegInSel)  <=  RegIn;
-            end if;
+        -- Handle double-word write (lowest priority)
+        if RegDStore = '1' then
+            next_registers(2 * RegDInSel + 1) := RegDInHigh;
+            next_registers(2 * RegDInSel)     := RegDInLow;
         end if;
 
+        -- Address register write (medium priority)
+        if RegAxStore = '1' then
+            next_registers(RegAxInSel) := RegAxIn;
+        end if;
+
+        -- Normal register write (highest priority)
+        if RegStore = '1' then
+            next_registers(RegInSel) := RegIn;
+        end if;
+
+        -- Commit to internal register state
+        Registers <= next_registers;
     end process;
 
-end  behavioral;
+    -- Outputs
+    RegA  <= Registers(RegASel);
+    RegB  <= Registers(RegBSel);
+    RegA1 <= Registers(1);
+    RegA2 <= Registers(2);
+    RegD  <= Registers(2 * RegDSel + 1) & Registers(2 * RegDSel);
+
+end behavioral;
