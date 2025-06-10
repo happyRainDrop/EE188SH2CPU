@@ -453,7 +453,7 @@ architecture Structural of CPUtoplevel is
     -- Signals and states
     --==================================================================================================================================================
     -- CPU top level signals; finite state machine and IR
-    type states is (ZERO_CLK, FETCH_IR, END_OF_FILE); 
+    type states is (ZERO_CLK, LOAD,  FETCH_IR, END_OF_FILE); 
     --TWO_CLK_W, TWO_CLK_R, THREE_CLK_R, THREE_CLK_W);
     signal CurrentState     : states;
 
@@ -580,7 +580,7 @@ begin
                     holdPC;
                     ------------------------------------------------ Update state
                     if (Reset = '1') then 
-                        CurrentState <= FETCH_IR;    -- CPU is enabled for the first time
+                        CurrentState <= LOAD;    -- CPU is enabled for the first time
                         -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z.
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; 
                         SH2SelDataBus <= HOLD_DATA_BUS;
@@ -590,6 +590,14 @@ begin
                         SH2SelAddressBus <= OPEN_ADDRESS_BUS;
                         SH2SelDataBus <= OPEN_DATA_BUS;
                     end if;
+
+                when LOAD =>
+                    -------------------------------------------------- Update the IR, clock cycle, and PC
+
+                    RE0 <= '0'; RE1 <= '0'; RE2 <= '1'; RE3 <= '1';  -- Read low bytes in (instructions stored in low bytes)
+                    ClockCounter            <= ONE_CLOCK;       --Set clock counter back to 1
+                    incPC;
+                    CurrentState <= FETCH_IR;
 
                 when FETCH_IR => 
 
@@ -644,6 +652,24 @@ begin
             case CurrentState is
                 when ZERO_CLK =>
                     -- nothing to do
+
+                when LOAD =>
+                    if (WriteToMemory = WRITE_TO_MEMORY) then
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
+                        SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
+                        WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
+                    
+                        report "YIPEE falling";
+                        report "    SH2SelAddressBus = " & integer'image(SH2SelAddressBus);
+                        report "    SH2SelDataBus = " & integer'image(SH2SelAddressBus);
+                        report "    DataBus = x""" & to_hstring(SH2DataBus) & """";
+                        report "    RegA = x""" & to_hstring(RegArrayOutA) & """";
+                        report "    AddressBus = x""" & to_hstring(SH2AddressBus) & """";
+                        report "    RegB = x""" & to_hstring(RegArrayOutB) & """";
+                        report "    WE0 = " & std_ulogic'image(WE0);
+
+                    end if;
+
                 when FETCH_IR =>
                     
                     if (WriteToMemoryL = WRITE_TO_MEMORY) then
