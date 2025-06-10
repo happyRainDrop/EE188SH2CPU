@@ -664,10 +664,6 @@ begin
                         report "    WE0 = " & std_ulogic'image(WE0);
 
                     end if;
-
-                    -- Open data bus for next read-in
-                    SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                    SH2SelDataBus <= OPEN_DATA_BUS;
                     
                 when others => -- halt the CPU
                     InstructionReg <= NOP;
@@ -1126,7 +1122,7 @@ begin
 
     -- Make instruction reg combinational so that it updates immediately
     InstructionReg <= SH2DataBus(instrLen-1 downto 0) 
-                    when SH2DataBus(instrLen-1 downto 0) /= ("ZZZZZZZZZZZZZZZZ") 
+                    when SH2Clock = '1'
                     else InstructionReg;
 
     WriteToMemory <= WRITE_TO_MEMORY when std_match(MOVB_Rm_TO_atRn, InstructionReg) else NO_WRITE_TO_MEMORY;
