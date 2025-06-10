@@ -191,7 +191,7 @@ begin
         report "Ready for CPU to access memory.";
         wait until rising_edge(SH2clock);     -- reset on the rising edge
         Reset <= '1';
-        wait for 250 ns;
+        wait for 300 ns;
         wait until rising_edge(SH2clock);     -- reset on the rising edge
         Reset <= '0';
 

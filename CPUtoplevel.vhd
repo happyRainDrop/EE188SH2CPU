@@ -594,7 +594,7 @@ begin
 
                         -- For the next state: Set data, address buses to high impedance so that test bench can write them
                         SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                        SH2SelDataBus <= OPEN_DATA_BUS;
+                        SH2SelDataBus <= HOLD_DATA_BUS;
 
                     else 
                         CurrentState <= FETCH_IR;
@@ -605,6 +605,15 @@ begin
                         else                                                    -- Add some STD_MATCH logic here later
                             SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
                             SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
+
+                        report "YIPEE rising";
+                        report "    SH2SelAddressBus = " & integer'image(SH2SelAddressBus);
+                        report "    SH2SelDataBus = " & integer'image(SH2SelAddressBus);
+                        report "    DataBus = x""" & to_hstring(SH2DataBus) & """";
+                        report "    RegA = x""" & to_hstring(RegArrayOutA) & """";
+                        report "    AddressBus = x""" & to_hstring(SH2AddressBus) & """";
+                        report "    RegB = x""" & to_hstring(RegArrayOutB) & """";
+                        report "    WE0 = " & std_ulogic'image(WE0);
                             
                         end if;
 
@@ -641,13 +650,17 @@ begin
                 when FETCH_IR =>
                     
                     if (WriteToMemory = WRITE_TO_MEMORY) then
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
+                        SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
                         WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
                     
-                        report "YIPEE";
+                        report "YIPEE falling";
                         report "    SH2SelAddressBus = " & integer'image(SH2SelAddressBus);
                         report "    SH2SelDataBus = " & integer'image(SH2SelAddressBus);
                         report "    DataBus = x""" & to_hstring(SH2DataBus) & """";
+                        report "    RegA = x""" & to_hstring(RegArrayOutA) & """";
                         report "    AddressBus = x""" & to_hstring(SH2AddressBus) & """";
+                        report "    RegB = x""" & to_hstring(RegArrayOutB) & """";
                         report "    WE0 = " & std_ulogic'image(WE0);
 
                     end if;
@@ -709,7 +722,7 @@ begin
             DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
             DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
 
-            WriteToMemory <= NO_WRITE_TO_MEMORY;
+            -- WriteToMemory <= NO_WRITE_TO_MEMORY;
 
         end procedure;
 
@@ -1084,9 +1097,7 @@ begin
                 -- Setting Reg Array control signals                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
                 SH2RegBSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
-                
-                WriteToMemory <= WRITE_TO_MEMORY;
-        
+
             elsif std_match(NOP, InstructionReg) then
 
                 SetDefaultControlSignals;
@@ -1117,4 +1128,7 @@ begin
     InstructionReg <= SH2DataBus(instrLen-1 downto 0) 
                     when SH2DataBus(instrLen-1 downto 0) /= ("ZZZZZZZZZZZZZZZZ") 
                     else InstructionReg;
+
+    WriteToMemory <= WRITE_TO_MEMORY when std_match(MOVB_Rm_TO_atRn, InstructionReg) else NO_WRITE_TO_MEMORY;
+
 end Structural;
