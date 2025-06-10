@@ -446,7 +446,7 @@ architecture Structural of CPUtoplevel is
     signal InstructionReg   : std_logic_vector(instrLen - 1 downto 0) := (others => 'Z'); -- IR
     signal ClockCounter     : std_logic_vector(regLen - 1 downto 0); -- what clock cycle are we on?
 
-    signal WriteToMemory : std_logic := '0';  -- active high
+    signal WriteToMemory : std_logic := NO_WRITE_TO_MEMORY;  -- active high
 
 begin
 
@@ -605,6 +605,7 @@ begin
                         else                                                    -- Add some STD_MATCH logic here later
                             SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
                             SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
+                            
                         end if;
 
                     end if;
@@ -638,13 +639,22 @@ begin
                 when ZERO_CLK =>
                     -- nothing to do
                 when FETCH_IR =>
-
+                    
                     if (WriteToMemory = WRITE_TO_MEMORY) then
                         WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
-                        -- Open data bus for next read-in
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                        SH2SelDataBus <= OPEN_DATA_BUS;
+                    
+                        report "YIPEE";
+                        report "    SH2SelAddressBus = " & integer'image(SH2SelAddressBus);
+                        report "    SH2SelDataBus = " & integer'image(SH2SelAddressBus);
+                        report "    DataBus = x""" & to_hstring(SH2DataBus) & """";
+                        report "    AddressBus = x""" & to_hstring(SH2AddressBus) & """";
+                        report "    WE0 = " & std_ulogic'image(WE0);
+
                     end if;
+
+                    -- Open data bus for next read-in
+                    SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
+                    SH2SelDataBus <= OPEN_DATA_BUS;
                     
                 when others => -- halt the CPU
                     InstructionReg <= NOP;
@@ -712,6 +722,12 @@ begin
             -- ARITHMETIC
             -- ==================================================================================================
             if std_match(InstructionReg, ADD_imm_Rn) then
+
+                -- Report the values
+                -- report "ADD IMM (Rx, ImmVal)";
+                -- report "Register number = " & integer'image(to_integer(unsigned(InstructionReg(11 downto 8))));
+                -- report "Immediate value = x""" & to_hstring((23 downto 0 => '0') & InstructionReg(7 downto 0)) & """";
+
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
@@ -1076,7 +1092,8 @@ begin
                 SetDefaultControlSignals;
 
             else
-               
+                report "Warning: The following instruction register did not match any known instructions: Value = x""" & to_hstring(InstructionReg) & """";
+
                 SetDefaultControlSignals;
                 
             end if;
@@ -1097,6 +1114,7 @@ begin
             (others => 'Z');
 
     -- Make instruction reg combinational so that it updates immediately
-    InstructionReg <= SH2DataBus(instrLen-1 downto 0);
-
+    InstructionReg <= SH2DataBus(instrLen-1 downto 0) 
+                    when SH2DataBus(instrLen-1 downto 0) /= ("ZZZZZZZZZZZZZZZZ") 
+                    else InstructionReg;
 end Structural;

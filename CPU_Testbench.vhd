@@ -199,6 +199,9 @@ begin
         SH2DataBus <= (others => 'Z');         -- let CPU control data and address bus now
         SH2AddressBus <= (others => 'Z'); 
         report "CPU DONE!!";
+        
+        wait until falling_edge(SH2clock);     -- wait 1 more clock for CPU to recognize it's in the "zero clock" state
+
         -------------------------------------------------------------------- READING
 
         -- Read all memory contents
