@@ -491,7 +491,6 @@ begin
     -- Instantiate DMAU
     SH2DMAU : entity  work.SH2DMAU
         port map(
-  --          SH2DMAUReset => SH2DMAUReset,
             SH2DMAURegSource => RegArrayOutA, 
             SH2DMAUImmediateSource => DMAUImmediateSource, 
             SH2DMAURegOffset => RegArrayOutB, 
@@ -605,15 +604,6 @@ begin
                         else                                                    -- Add some STD_MATCH logic here later
                             SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
                             SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
-
-                        report "YIPEE rising";
-                        report "    SH2SelAddressBus = " & integer'image(SH2SelAddressBus);
-                        report "    SH2SelDataBus = " & integer'image(SH2SelAddressBus);
-                        report "    DataBus = x""" & to_hstring(SH2DataBus) & """";
-                        report "    RegA = x""" & to_hstring(RegArrayOutA) & """";
-                        report "    AddressBus = x""" & to_hstring(SH2AddressBus) & """";
-                        report "    RegB = x""" & to_hstring(RegArrayOutB) & """";
-                        report "    WE0 = " & std_ulogic'image(WE0);
                             
                         end if;
 
@@ -653,15 +643,6 @@ begin
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
                         SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
                         WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
-                    
-                        report "YIPEE falling";
-                        report "    SH2SelAddressBus = " & integer'image(SH2SelAddressBus);
-                        report "    SH2SelDataBus = " & integer'image(SH2SelAddressBus);
-                        report "    DataBus = x""" & to_hstring(SH2DataBus) & """";
-                        report "    RegA = x""" & to_hstring(RegArrayOutA) & """";
-                        report "    AddressBus = x""" & to_hstring(SH2AddressBus) & """";
-                        report "    RegB = x""" & to_hstring(RegArrayOutB) & """";
-                        report "    WE0 = " & std_ulogic'image(WE0);
 
                     end if;
                     
@@ -680,7 +661,7 @@ begin
     --combinational if statements
     --Matches the 
     --at the end of the matches -> update the currentstate with nextState variable
-    matchInstruction : process(SH2clock)
+    matchInstruction : process(InstructionReg)
 
         -- Set default instruction-specific control signals
         -- Does not include PMAU and address/data bus setting logic, because that is determined
@@ -689,16 +670,16 @@ begin
         begin
             -- Default RegArray inputs: Do not input any registers, 
             -- only put Reg0 on output buses
-            SH2RegIn <= REG_LEN_ZEROES; 
-            SH2RegInSel <= REG_ZEROTH_SEL; 
-            SH2RegStore <= REG_NO_STORE;   
-            SH2RegASel  <= REG_ZEROTH_SEL;                                      
-            SH2RegBSel  <= REG_ZEROTH_SEL;                      
-            SH2RegAxIn  <= REG_LEN_ZEROES;
-            SH2RegAxInSel <= REG_ZEROTH_SEL;
-            SH2RegAxStore <= REG_NO_STORE;                                              
-            SH2RegA1Sel <= REG_ZEROTH_SEL;
-            SH2RegA2Sel <= REG_ZEROTH_SEL;
+            -- SH2RegIn <= REG_LEN_ZEROES; 
+            -- SH2RegInSel <= REG_ZEROTH_SEL; 
+            -- SH2RegStore <= REG_NO_STORE;   
+            -- SH2RegASel  <= REG_ZEROTH_SEL;                                      
+            -- SH2RegBSel  <= REG_ZEROTH_SEL;                      
+            -- SH2RegAxIn  <= REG_LEN_ZEROES;
+            -- SH2RegAxInSel <= REG_ZEROTH_SEL;
+            -- SH2RegAxStore <= REG_NO_STORE;                                              
+            -- SH2RegA1Sel <= REG_ZEROTH_SEL;
+            -- SH2RegA2Sel <= REG_ZEROTH_SEL;
 
             -- Default ALU inputs. Immediate is 0 and not used by default. Carry ins are also 0
             SH2Cin                    <= DEFAULT_ALU_CIN;
@@ -722,11 +703,9 @@ begin
 
         end procedure;
 
-        variable SH2IntermediateResult : std_logic_vector(regLen - 1 downto 0);
-
     begin
-        if rising_edge(SH2clock) and CurrentState = FETCH_IR then
-            report "InstructionReg = x""" & to_hstring(InstructionReg) & """";
+
+        if CurrentState = FETCH_IR then
             --Default all the units
             SetDefaultControlSignals;
 
@@ -735,371 +714,23 @@ begin
             -- ==================================================================================================
             if std_match(InstructionReg, ADD_imm_Rn) then
 
-                -- Report the values
-                -- report "ADD IMM (Rx, ImmVal)";
-                -- report "Register number = " & integer'image(to_integer(unsigned(InstructionReg(11 downto 8))));
-                -- report "Immediate value = x""" & to_hstring((23 downto 0 => '0') & InstructionReg(7 downto 0)) & """";
-
-                -- Setting Reg Array control signals
-                SH2IntermediateResult := SH2ALUResult;
-                SH2RegIn <= SH2IntermediateResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-
                 --Setting ALU control signals
                 SH2FCmd                     <= "1010";  --Use OpB for the Adder
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
                 SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
 
-            elsif std_match(InstructionReg, ADD_Rm_Rn) then                 
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
-   
-            elsif std_match(InstructionReg, ADDC_Rm_Rn) then 
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
-            
-            elsif std_match(InstructionReg, ADDV_Rm_Rn) then 
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
-            
-            elsif std_match(InstructionReg, SUB_Rm_Rn) then 
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
-         
-            elsif std_match(InstructionReg, SUBC_Rm_Rn) then 
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
+                                -- Report the values
+                report "==== start === ";
+                report "ADD IMM (Rx, ImmVal)";
+                report "Register number = " & integer'image(to_integer(unsigned(InstructionReg(11 downto 8))));
+                report "Immediate value = x""" & to_hstring((23 downto 0 => '0') & InstructionReg(7 downto 0)) & """";
+                report "   IR = x""" & to_hstring(InstructionReg) & """";
+                report "   Reg1 = x""" & to_hstring(RegArrayOutA1) & """";
+                report "   ALU = x""" & to_hstring(SH2ALUResult) & """";
+                report "==== end === ";
 
             
-            elsif std_match(InstructionReg, SUBV_Rm_Rn) then 
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn     
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
-
-            --  ==================================================================================================
-            -- SHIFTS (0/8) : Needs testing
-            --  ==================================================================================================
-            elsif std_match(SHLL_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
-                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value   
-
-                --Setting ALU control signals
-                SH2SCmd                     <= "000";   --Left shift left
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-
-            elsif std_match(SHLR_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn   
-                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the low bit value of Rn
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value 
-
-                --Setting ALU control signals
-                SH2SCmd                     <= "100";   --LSR
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-            
-            elsif std_match(SHAR_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn    
-                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the first bit value of Rn
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                               
-
-                --Setting ALU control signals
-                SH2SCmd                     <= "101";   --ASR
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-        
-            elsif std_match(SHAL_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
-                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                                 
-
-                --Setting ALU control signals
-                SH2SCmd                     <= "000";   --LSL
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-            
-            elsif std_match(ROTCR_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the first bit value of Rn
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value   
-
-                --Setting ALU control signals
-                SH2Cin                      <= RegArrayOutB(0); --Feed in T-bit into RRC
-                SH2SCmd                     <= "111";   --RRC
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-
-            elsif std_match(ROTCL_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
-
-                --Setting ALU control signals
-                SH2Cin                      <= RegArrayOutB(0); --Feed in T-bit into RLC
-                SH2SCmd                     <= "011";   --Left shift left
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-            
-            elsif std_match(ROTR_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(0);                                  --Update the T-bit with the first bit value of Rn
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value   
-
-                --Setting ALU control signals
-                SH2SCmd                     <= "110";   --ROR
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-
-            elsif std_match(ROTL_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn     
-                SH2RegBSel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
-                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                              
-
-                --Setting ALU control signals
-                SH2SCmd                     <= "010";   --ROL
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-
-            --  ==================================================================================================
-            -- LOGICAL 0/9 Needs testing
-            --  ==================================================================================================
-            elsif std_match(AND_Rm_Rn, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn        <= SH2ALUResult;
-                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore     <= REG_STORE;
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-                SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;
-
-            elsif std_match(AND_imm_R0, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn    <= SH2ALUResult;
-                SH2RegInSel <= REG_ZEROTH_SEL;
-                SH2RegStore <= REG_STORE;
-                SH2RegASel  <= REG_ZEROTH_SEL;
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;
-
-            elsif std_match(TST_Rm_Rn, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-                SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;
-
-                if std_match(SH2ALUResult, REG_LEN_ZEROES) then 
-                    SH2RegA1Sel         <= REG_SR;
-                    RegArrayOutA1(0)    <= '1';
-                    SH2RegAxIn          <= RegArrayOutA1;
-                    SH2RegAxInSel       <= REG_SR;
-                    SH2RegAxStore       <= REG_STORE;
-                end if;
-
-            elsif std_match(TST_imm_R0, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegASel  <= REG_ZEROTH_SEL;
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;    
-
-                if std_match(SH2ALUResult, REG_LEN_ZEROES) then 
-                SH2RegA1Sel         <= REG_SR;
-                RegArrayOutA1(0)    <= '1';
-                SH2RegAxIn          <= RegArrayOutA1;
-                SH2RegAxInSel       <= REG_SR;
-                SH2RegAxStore       <= REG_STORE;
-                end if;
-
-            elsif std_match(OR_Rm_Rn, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn        <= SH2ALUResult;
-                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore     <= REG_STORE;
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-                SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1110";
-                SH2ALUCmd                   <= ALU_FB_SEL;
-
-            elsif std_match(OR_imm_R0, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn    <= SH2ALUResult;
-                SH2RegInSel <= REG_ZEROTH_SEL;
-                SH2RegStore <= REG_STORE;
-                SH2RegASel  <= REG_ZEROTH_SEL;
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1110";
-                SH2ALUCmd                   <= ALU_FB_SEL;
-        
-            elsif std_match(XOR_Rm_Rn, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn        <= SH2ALUResult;
-                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore     <= REG_STORE;
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-                SH2RegBSel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "0110";
-                SH2ALUCmd                   <= ALU_FB_SEL;
-
-            elsif std_match(XOR_imm_R0, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn    <= SH2ALUResult;
-                SH2RegInSel <= REG_ZEROTH_SEL;
-                SH2RegStore <= REG_STORE;
-                SH2RegASel  <= REG_ZEROTH_SEL;
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "0110";
-                SH2ALUCmd                   <= ALU_FB_SEL;       
-                
-            elsif std_match(NOT_Rm_Rn, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn        <= SH2ALUResult;
-                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore     <= REG_STORE;
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "0011";
-                SH2ALUCmd                   <= ALU_FB_SEL;    
-
-            --  ==================================================================================================
-            -- MOV (Data Transfer)
-            --  ==================================================================================================
-            elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
-
-                -- Setting Reg Array control signals                                             
-                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
-                SH2RegBSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
-
-                WriteToMemory <= WRITE_TO_MEMORY;
-
             elsif std_match(NOP, InstructionReg) then
 
                 SetDefaultControlSignals;
@@ -1113,6 +744,25 @@ begin
 
         end if;
     end process matchInstruction;
+
+
+    executeInstruction : process(SH2Clock)
+    begin
+        if CurrentState = FETCH_IR and rising_edge(SH2Clock) then
+
+            if std_match(InstructionReg, ADD_imm_Rn) then
+
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;                                           --Actually write
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
+            
+            end if;
+
+        end if;
+    end process executeInstruction;
+
 
     -- Set buses (This is combinational, outside of any clocked process.)
     SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
@@ -1131,6 +781,5 @@ begin
                     when SH2Clock = '1'
                     else InstructionReg;
 
-    -- WriteToMemory <= WRITE_TO_MEMORY when std_match(MOVB_Rm_TO_atRn, InstructionReg) else NO_WRITE_TO_MEMORY;
 
 end Structural;
