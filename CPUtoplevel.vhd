@@ -38,6 +38,7 @@
 --     10 June 25 Ruth Berkun       First program works. Fixed timing (fetch, then execute). 
 --                                  Not using RegB for ALU and MOV ops
 --                                  Made intermediate variables for MOV reg outputs.
+--     11 June 25 Ruth Berkun       Update addressbus to reflect 4*PC value (Each longword is 4 apart in memory address now) 
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -872,11 +873,12 @@ begin
         SH2ALUResult when SH2SelDataBus = SET_DATA_BUS_TO_ALU_OUT else
             (others => 'Z');
 
-    SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
-        SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
-        SH2PC when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
-        HoldRegA2 when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT else
-            (others => 'Z');
+SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
+    SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
+    std_logic_vector(to_unsigned(4 * to_integer(unsigned(SH2PC)), SH2AddressBus'length)) when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
+    HoldRegA2 when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT else
+    (others => 'Z');
+
 
     -- Make instruction reg combinational so that it updates immediately
     InstructionReg <= SH2DataBus(instrLen-1 downto 0) 

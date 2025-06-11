@@ -15,6 +15,8 @@
 --      13 May 25  Ruth Berkun      Remove Enable signal, put memory instantiation here
 --      14 May 25  Ruth Berkun      Resolved clocking issues between switching from testbench to CPU-driven memory mode
 --      17 May 25  Ruth Berkun      Change so that each instruction takes one full slot (low byte of 32 bits) in memory
+--     11 June 25  Ruth Berkun      Edit input and output file dumping to account for each longword being 4 addresses apart 
+--                                  (word1 at address 0, word2 at address 4, etc)
 ----------------------------------------------------------------------------
 
 library ieee;
@@ -73,10 +75,10 @@ begin
     SH2ExternalMemory : entity work.MEMORY32x32
     generic map (
         MEMSIZE     => memBlockWordSize,
-        START_ADDR0 => (0 * memBlockWordSize),
-        START_ADDR1 => (1 * memBlockWordSize),
-        START_ADDR2 => (2 * memBlockWordSize),
-        START_ADDR3 => (3 * memBlockWordSize)
+        START_ADDR0 => (0 * memBlockWordSize * 4),
+        START_ADDR1 => (1 * memBlockWordSize * 4),
+        START_ADDR2 => (2 * memBlockWordSize * 4),
+        START_ADDR3 => (3 * memBlockWordSize * 4)
     )
     port map (
         RE0    => memRE0,
@@ -172,7 +174,7 @@ begin
             tbWE0 <= '0'; tbWE1 <= '0'; tbWE2 <= '1'; tbWE3 <= '1'; 
 
             -- written low byte so next instruction need to write high byte of new memory location
-            addr := addr + 1;
+            addr := addr + 4;
 
             -- Done writing, set writing idle
             wait until rising_edge(SH2clock);
@@ -216,7 +218,7 @@ begin
             for j in 0 to memBlockWordSize-1 loop   -- Looping over addresses in memory blocks
 
                 wait until falling_edge(SH2clock);
-                SH2AddressBus <= std_logic_vector(to_unsigned(i * memBlockWordSize + j, 32)); 
+                SH2AddressBus <= std_logic_vector(to_unsigned(4*(i * memBlockWordSize + j), 32)); 
                 tbRE0 <= '0'; tbRE1 <= '0'; tbRE2 <= '0'; tbRE3 <= '0'; 
 
                 wait until rising_edge(SH2clock);
@@ -231,7 +233,7 @@ begin
                 write(L, string'(" at "));
                 write(L, SH2AddressBus);
                 write(L, string'(" index "));
-                write(L, i * memBlockWordSize + j, right, 3);
+                write(L, 4* (i * memBlockWordSize + j), right, 3);
                 write(L, string'(": "));
                 write(L, SH2DataBus);
                 writeline(mem_dump, L);
