@@ -29,7 +29,7 @@ end CPU_Testbench;
 
 architecture behavior of CPU_Testbench is
 
-    constant memBlockWordSize : integer := 25;
+    constant memBlockWordSize : integer := 256;
     constant regLen : integer := 32;
     constant instrLen : integer := 16;
     constant zeroes16 : std_logic_vector(15 downto 0) := (others => '0');

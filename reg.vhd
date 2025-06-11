@@ -140,8 +140,8 @@ begin
     -- Outputs
     RegA  <= Registers(RegASel);
     RegB  <= Registers(RegBSel);
-    RegA1 <= Registers(1);
-    RegA2 <= Registers(2);
+    RegA1  <=  Registers(RegA1Sel);
+    RegA2  <=  Registers(RegA2Sel);
     RegD  <= Registers(2 * RegDSel + 1) & Registers(2 * RegDSel);
 
 end behavioral;
