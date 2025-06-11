@@ -425,7 +425,7 @@ architecture Structural of CPUtoplevel is
     -- PMAU added inputs (not directly from generic MAU)
     signal PMAUImmediateSource : std_logic_vector(regLen-1 downto 0) := (others => '0');
     signal PMAUImmediateOffset : std_logic_vector(regLen-1 downto 0) := (others => '0');
-    
+
     -- PMAU OUTPUTS
     signal SH2ProgramAddressBus : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- PMAU input address, updated
                                                                                             -- (Control unit uses to update PC)
@@ -566,7 +566,7 @@ begin
         end procedure;
 
     begin
-    
+
         -- Rising edge: Update state, load PC, load IR
         --=====================================================================================
         if rising_edge(SH2clock) then
@@ -761,17 +761,72 @@ begin
                 -- Setting Reg Array control signals
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
                 SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
 
                 --Setting ALU control signals
                 SH2SCmd                     <= "000";   --Left shift left
                 SH2ALUCmd                   <= "10";    --Select the shifter output
 
+
+            elsif std_match(SHLR_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn   
+                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting                                 
+
+                --Setting ALU control signals
+                SH2SCmd                     <= "100";   --LSR
+                SH2ALUCmd                   <= "10";    --Select the shifter output
+            
+            elsif std_match(SHAR_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn    
+                SH2RegA2Sel  <= REG_SR;                                             --Grab the status register for Shifting
+        
+                --Setting ALU control signals
+                SH2SCmd                     <= "101";   --ASR
+                SH2ALUCmd                   <= "10";    --Select the shifter output
+        
+            elsif std_match(SHAL_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
+                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting                    
+
+                --Setting ALU control signals
+                SH2SCmd                     <= "000";   --LSL
+                SH2ALUCmd                   <= "10";    --Select the shifter output
+            
+            elsif std_match(ROTCR_Rn, InstructionReg) then
+                -- Setting Reg Array control signals                         
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
+                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting
+
+                --Setting ALU control signals
+                SH2Cin                      <= RegArrayOutA2(0); --Feed in T-bit into RRC
+                SH2SCmd                     <= "111";   --RRC
+                SH2ALUCmd                   <= "10";    --Select the shifter output
+
+            elsif std_match(ROTCL_Rn, InstructionReg) then
+                -- Setting Reg Array control signals                                
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
+                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting
+               
+                --Setting ALU control signals
+                SH2Cin                      <= RegArrayOutA2(0); --Feed in T-bit into RLC
+                SH2SCmd                     <= "011";   --Left shift left
+                SH2ALUCmd                   <= "10";    --Select the shifter output
+            
+            elsif std_match(ROTR_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
+                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting
+               
+                --Setting ALU control signals
+                SH2SCmd                     <= "110";   --ROR
+                SH2ALUCmd                   <= "10";    --Select the shifter output
+
             elsif std_match(ROTL_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn     
-                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting
-                RegArrayOutB(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn                                      
+                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting                             
 
                 --Setting ALU control signals
                 SH2SCmd                     <= "010";   --ROL
@@ -803,6 +858,9 @@ begin
                 -- Setting Reg Array control signals                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
                 SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
+            
+                report "HoldRegA = x""" & to_hstring(RegArrayOutA) & """";
+                report "HoldRegA2 = x""" & to_hstring(RegArrayOutA2) & """";
 
             --  ==================================================================================================
             -- MISC
@@ -863,23 +921,92 @@ begin
             --  ==================================================================================================
             elsif std_match(SHLL_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
+                RegArrayOutA2(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
 
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxIn  <= RegArrayOutA2;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value 
+
+            elsif std_match(SHLR_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                RegArrayOutA2(0) <= RegArrayOutA(0);                                  --Update the T-bit with the low bit value of Rn 
+                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;                                           --Actually write
+
+                SH2RegAxIn  <= RegArrayOutA2;                                        --Write back in the RegArrayOutB which is the Status Register   
+                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value           
+
+            
+            elsif std_match(SHAR_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                RegArrayOutA2(0) <= RegArrayOutA(0);                                  --Update the T-bit with the low bit value of Rn 
+                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;                                           --Actually write
+
+                SH2RegAxIn  <= RegArrayOutA2;                                        --Write back in the RegArrayOutB which is the Status Register   
+                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value 
+
+            elsif std_match(SHAL_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                RegArrayOutA2(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
+                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;                                           --Actually write
+
+                SH2RegAxIn  <= RegArrayOutA2;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value 
+        
+            elsif std_match(ROTCL_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                RegArrayOutA2(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn         
+                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;                                           --Actually write
+                
+                SH2RegAxIn  <= RegArrayOutA2;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value   
+
+            elsif std_match(ROTCR_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                RegArrayOutA2(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
+                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;                                           --Actually write
+
+                SH2RegAxIn  <= RegArrayOutA2;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
                 SH2RegAxStore <= REG_STORE;                                         --Update the value 
 
             elsif std_match(ROTL_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
+                RegArrayOutA2(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn         
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                
-                SH2RegAxIn  <= RegArrayOutB;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxIn  <= RegArrayOutA2;                                        --Write back in the RegArrayOutB which is the Status Register
                 SH2RegAxInSel <= REG_SR;                                                --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                              
+                SH2RegAxStore <= REG_STORE;                                         --Update the value               
+            
+            elsif std_match(ROTR_Rn, InstructionReg) then
+                -- Setting Reg Array control signals
+                RegArrayOutA2(0) <= RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
+                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;                                           --Actually write
+
+                SH2RegAxIn  <= RegArrayOutA2;                                        --Write back in the RegArrayOutB which is the Status Register
+                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE;                                         --Update the value 
             
             --  ==================================================================================================
             -- LOGICAL 0/9 Needs testing
@@ -918,10 +1045,10 @@ begin
             (others => 'Z');
 
     SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
-    SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
+        SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
     std_logic_vector(to_unsigned(4 * to_integer(unsigned(SH2PC)), SH2AddressBus'length)) when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
     HoldRegA2 when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT else
-    (others => 'Z');
+            (others => 'Z');
 
 
     -- Make instruction reg combinational so that it updates immediately
