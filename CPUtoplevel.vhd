@@ -39,6 +39,7 @@
 --                                  Not using RegB for ALU and MOV ops
 --                                  Made intermediate variables for MOV reg outputs.
 --     11 June 25 Ruth Berkun       Update addressbus to reflect 4*PC value (Each longword is 4 apart in memory address now) 
+--     11 June 25 Nerissa Finnen    Updated all Shift commands to new style
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -766,7 +767,6 @@ begin
                 SH2SCmd                     <= "000";   --Left shift left
                 SH2ALUCmd                   <= "10";    --Select the shifter output
 
-
             elsif std_match(SHLR_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
                 SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn   
@@ -837,13 +837,87 @@ begin
             --  ==================================================================================================
             elsif std_match(AND_Rm_Rn, InstructionReg) then
                 --Setting Reg Array control signals
-
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
                 SH2RegA2Sel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1000";
                 SH2ALUCmd                   <= ALU_FB_SEL;
+
+            elsif std_match(AND_imm_R0, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel  <= REG_ZEROTH_SEL;
+                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
+
+                --Setting ALU control signals
+                SH2FCmd                     <= "1000";
+                SH2ALUCmd                   <= ALU_FB_SEL;
+
+            elsif std_match(TST_Rm_Rn, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
+                SH2RegA2Sel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+
+                --Setting ALU control signals
+                SH2FCmd                     <= "1000";
+                SH2ALUCmd                   <= ALU_FB_SEL;
+
+            elsif std_match(TST_imm_R0, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel  <= REG_ZEROTH_SEL;
+                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
+
+                --Setting ALU control signals
+                SH2FCmd                     <= "1000";
+                SH2ALUCmd                   <= ALU_FB_SEL;    
+
+            elsif std_match(OR_Rm_Rn, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
+                SH2RegA2Sel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+
+                --Setting ALU control signals
+                SH2FCmd                     <= "1110";
+                SH2ALUCmd                   <= ALU_FB_SEL;
+
+            elsif std_match(OR_imm_R0, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel  <= REG_ZEROTH_SEL;
+                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
+
+                --Setting ALU control signals
+                SH2FCmd                     <= "1110";
+                SH2ALUCmd                   <= ALU_FB_SEL;
+        
+            elsif std_match(XOR_Rm_Rn, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
+                SH2RegA2Sel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+
+                --Setting ALU control signals
+                SH2FCmd                     <= "0110";
+                SH2ALUCmd                   <= ALU_FB_SEL;
+
+            elsif std_match(XOR_imm_R0, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel  <= REG_ZEROTH_SEL;
+                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
+                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
+
+                --Setting ALU control signals
+                SH2FCmd                     <= "0110";
+                SH2ALUCmd                   <= ALU_FB_SEL;       
+                
+            elsif std_match(NOT_Rm_Rn, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+
+                --Setting ALU control signals
+                SH2FCmd                     <= "0011";
+                SH2ALUCmd                   <= ALU_FB_SEL; 
             
             --  ==================================================================================================
             -- MOV (Data Transfer)
@@ -1016,6 +1090,60 @@ begin
                 SH2RegIn        <= SH2ALUResult;
                 SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
                 SH2RegStore     <= REG_STORE;
+            
+            elsif std_match(AND_imm_R0, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegIn    <= SH2ALUResult;
+                SH2RegInSel <= REG_ZEROTH_SEL;
+                SH2RegStore <= REG_STORE;
+            
+            elsif std_match(TST_Rm_Rn, InstructionReg) then    
+                if std_match(SH2ALUResult, REG_LEN_ZEROES) then 
+                    SH2RegA1Sel         <= REG_SR;
+                    RegArrayOutA1(0)    <= '1';
+                    SH2RegAxIn          <= RegArrayOutA1;
+                    SH2RegAxInSel       <= REG_SR;
+                    SH2RegAxStore       <= REG_STORE;
+                end if;
+
+            elsif std_match(TST_imm_R0, InstructionReg) then
+                if std_match(SH2ALUResult, REG_LEN_ZEROES) then 
+                SH2RegA1Sel         <= REG_SR;
+                RegArrayOutA1(0)    <= '1';
+                SH2RegAxIn          <= RegArrayOutA1;
+                SH2RegAxInSel       <= REG_SR;
+                SH2RegAxStore       <= REG_STORE;
+                end if;
+
+            elsif std_match(OR_Rm_Rn, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegIn        <= SH2ALUResult;
+                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegStore     <= REG_STORE;
+
+            elsif std_match(OR_imm_R0, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegIn    <= SH2ALUResult;
+                SH2RegInSel <= REG_ZEROTH_SEL;
+                SH2RegStore <= REG_STORE;
+
+            elsif std_match(XOR_Rm_Rn, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegIn        <= SH2ALUResult;
+                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegStore     <= REG_STORE;
+
+            elsif std_match(XOR_imm_R0, InstructionReg) then
+                --Setting Reg Array control signals
+                SH2RegIn    <= SH2ALUResult;
+                SH2RegInSel <= REG_ZEROTH_SEL;
+                SH2RegStore <= REG_STORE;
+           
+            elsif std_match(NOT_Rm_Rn, InstructionReg) then
+            --Setting Reg Array control signals
+            SH2RegIn        <= SH2ALUResult;
+            SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
+            SH2RegStore     <= REG_STORE;
 
             --  ==================================================================================================
             -- MOV
