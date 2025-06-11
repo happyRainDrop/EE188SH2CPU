@@ -714,6 +714,9 @@ begin
             -- ==================================================================================================
             if std_match(InstructionReg, ADD_imm_Rn) then
 
+                -- Setting register ops for ALU
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
+
                 --Setting ALU control signals
                 SH2FCmd                     <= "1010";  --Use OpB for the Adder
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
@@ -755,8 +758,7 @@ begin
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
+                SH2RegStore <= REG_STORE;                                           --Actually write 
             
             end if;
 
