@@ -35,6 +35,9 @@
 --     14 May 25  Ruth Berkun       Fixed Address and Data bus muxing issue (set to high Z when testbench accesses it)
 --                                  (And fixed corresponding setting of mux mode in finite state machine)
 --     17 May 25  Nerissa Finnen    Fixed first instruction attempt, redid instruction constants table (3rd time)
+--     10 June 25 Ruth Berkun       First program works. Fixed timing (fetch, then execute). 
+--                                  Not using RegB for ALU and MOV ops
+--                                  Made intermediate variables for MOV reg outputs.
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -432,6 +435,9 @@ architecture Structural of CPUtoplevel is
     signal RegArrayOutA1 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
     signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
 
+    signal HoldRegA : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    signal HoldRegA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+
     signal SH2PC : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- the PC: a very special register!
     signal SH2PC_next : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- what to set PC to on next rising edge of clock
     ------------------------------------------------------------------------------------------
@@ -697,6 +703,9 @@ begin
             --Default all the units
             SetDefaultControlSignals;
 
+            HoldRegA <= RegArrayOutA;
+            HoldRegA2 <= RegArrayOutA2;
+
             --  ==================================================================================================
             -- ARITHMETIC
             -- ==================================================================================================
@@ -755,7 +764,10 @@ begin
                 -- Setting Reg Array control signals                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
                 SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
-            
+
+                report "HoldRegA = x""" & to_hstring(RegArrayOutA) & """";
+                report "HoldRegA2 = x""" & to_hstring(RegArrayOutA2) & """";
+
             --  ==================================================================================================
             -- MISC
             --  ==================================================================================================
@@ -764,7 +776,7 @@ begin
                 SetDefaultControlSignals;
 
             else
-                report "Warning: The following instruction register did not match any known instructions: Value = x""" & to_hstring(InstructionReg) & """";
+                -- report "Warning: The following instruction register did not match any known instructions: Value = x""" & to_hstring(InstructionReg) & """";
 
                 SetDefaultControlSignals;
                 
@@ -856,14 +868,14 @@ begin
 
     -- Set buses (This is combinational, outside of any clocked process.)
     SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
-        RegArrayOutA when SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT else
+        HoldRegA when SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT else
         SH2ALUResult when SH2SelDataBus = SET_DATA_BUS_TO_ALU_OUT else
             (others => 'Z');
 
     SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
         SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
         SH2PC when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
-        RegArrayOutA2 when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT else
+        HoldRegA2 when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT else
             (others => 'Z');
 
     -- Make instruction reg combinational so that it updates immediately
