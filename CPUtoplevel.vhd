@@ -760,7 +760,7 @@ begin
             --  ==================================================================================================
             -- MOV (Data Transfer)
             --  ==================================================================================================
-            elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
+            elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
 
                 -- Setting Reg Array control signals                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
@@ -858,7 +858,7 @@ begin
             -- MOV
             --  ==================================================================================================
 
-            elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
+            elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
                 WriteToMemory <= WRITE_TO_MEMORY;
             
             end if;
