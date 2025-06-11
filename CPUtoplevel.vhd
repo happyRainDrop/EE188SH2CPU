@@ -175,6 +175,8 @@ package SH2_CPU_Constants is
     constant INSTR_LEN_ZEROES : std_logic_vector(15 downto 0) := (others => '0');
     constant WRITE_TO_MEMORY : std_logic := '1';
     constant NO_WRITE_TO_MEMORY : std_logic := '0';
+    constant READ_FROM_MEMORY : std_logic := '1';
+    constant NO_READ_FROM_MEMORY : std_logic := '0';
    
 
 end SH2_CPU_Constants;
@@ -407,6 +409,11 @@ architecture Structural of CPUtoplevel is
                                                                                         -- (Need control line to see which src)
     signal SH2DataAddressSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
                                                                                         -- (Need control line to see which src)
+
+        -- Read and Write flags that the PMAU sets
+    signal WriteToMemoryL : std_logic := NO_WRITE_TO_MEMORY;  -- active high
+    signal ReadFromMemoryL : std_logic := NO_WRITE_TO_MEMORY;  -- active high
+
     -------------------------------------------------------------------------------------
     -- PMAU FROM CONTROL LINE INPUTS
     signal SH2PMAUHold      : std_logic := '0';
@@ -451,9 +458,8 @@ architecture Structural of CPUtoplevel is
     signal CurrentState     : states;
 
     signal InstructionReg   : std_logic_vector(instrLen - 1 downto 0) := (others => 'Z'); -- IR
+    signal PrevIR : std_logic_vector(instrLen - 1 downto 0) := (others => 'Z'); -- IR
     signal ClockCounter     : std_logic_vector(regLen - 1 downto 0); -- what clock cycle are we on?
-
-    signal WriteToMemory : std_logic := NO_WRITE_TO_MEMORY;  -- active high
 
 begin
 
@@ -605,14 +611,8 @@ begin
                     else 
                         CurrentState <= FETCH_IR;
 
-                        if (WriteToMemory = NO_WRITE_TO_MEMORY) then            -- Open data bus for next read-in
-                            SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
-                            SH2SelDataBus <= OPEN_DATA_BUS;
-                        else                                                    -- Add some STD_MATCH logic here later
-                            SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
-                            SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
-                            
-                        end if;
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; -- Open data bus for next read-in of codespace
+                        SH2SelDataBus <= OPEN_DATA_BUS;
 
                     end if;
                     
@@ -646,11 +646,16 @@ begin
                     -- nothing to do
                 when FETCH_IR =>
                     
-                    if (WriteToMemory = WRITE_TO_MEMORY) then
+                    if (WriteToMemoryL = WRITE_TO_MEMORY) then
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
                         SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
                         WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
+                    end if;
 
+                    if (ReadFromMemoryL = READ_FROM_MEMORY) then
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
+                        RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0';  -- assume address, data bus correctly set in instruction matching
                     end if;
                     
                 when others => -- halt the CPU
@@ -704,8 +709,10 @@ begin
             --Default all the units
             SetDefaultControlSignals;
 
+            -- Save the values of the registers for execute state, which is a clock after the instruction
             HoldRegA <= RegArrayOutA;
             HoldRegA2 <= RegArrayOutA2;
+            -- PrevIR <= InstructionReg;
 
             --  ==================================================================================================
             -- ARITHMETIC
@@ -760,14 +767,16 @@ begin
             --  ==================================================================================================
             -- MOV (Data Transfer)
             --  ==================================================================================================
+            elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
+
+                 -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access address inside register Rm (at index m)
+
             elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
 
                 -- Setting Reg Array control signals                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
                 SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
-
-                report "HoldRegA = x""" & to_hstring(RegArrayOutA) & """";
-                report "HoldRegA2 = x""" & to_hstring(RegArrayOutA2) & """";
 
             --  ==================================================================================================
             -- MISC
@@ -802,7 +811,8 @@ begin
             SH2RegAxInSel <= REG_ZEROTH_SEL;
             SH2RegAxStore <= REG_NO_STORE; 
 
-            WriteToMemory <= NO_WRITE_TO_MEMORY;
+            WriteToMemoryL <= NO_WRITE_TO_MEMORY;
+            ReadFromMemoryL <= NO_READ_FROM_MEMORY;
 
         end procedure;
     begin
@@ -858,8 +868,16 @@ begin
             -- MOV
             --  ==================================================================================================
 
+            elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
+
+                SH2RegIn <= SH2DataBus;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access value inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+                
+                ReadFromMemoryL <= READ_FROM_MEMORY;
+
             elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
-                WriteToMemory <= WRITE_TO_MEMORY;
+                WriteToMemoryL <= WRITE_TO_MEMORY;
             
             end if;
 
@@ -873,7 +891,7 @@ begin
         SH2ALUResult when SH2SelDataBus = SET_DATA_BUS_TO_ALU_OUT else
             (others => 'Z');
 
-SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
+    SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
     SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
     std_logic_vector(to_unsigned(4 * to_integer(unsigned(SH2PC)), SH2AddressBus'length)) when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
     HoldRegA2 when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT else
