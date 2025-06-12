@@ -128,10 +128,10 @@ package SH2_CPU_Constants is
     -- is held at current value by decrementing by 1 and adding 1 as offset
     constant PMAU_HOLD         : std_logic := '0';     --Holds the PC value in the PMAU
     constant PMAU_NO_HOLD         : std_logic := '1';     --Does not hold the PC value in the PMAU
-    constant DEFAULT_SRC_SEL    : integer := 0;         --May change due to PC/GBR location moving
+    constant DMAU_ZERO_IMM      : std_logic_vector(31 downto 0) := (others => '0');
     constant DEFAULT_DEC_SEL    : std_logic := MAU_DEC_SEL;     --Select decrement
     constant DEFAULT_BIT    : integer := 0;         --Only 0th bit to modify
-    constant DEFAULT_POST_SEL   : std_logic := MAU_POST_SEL;     --Post decrement and preserve the initial value
+    constant DEFAULT_POST_SEL   : std_logic := MAU_PRE_SEL;     --Pre decrement to cancel the offset of 1
     constant DEFAULT_OFFSET_SEL : integer := 4;         --Select immediate offset multiplied by 1
     constant DEFAULT_OFFSET_VAL : std_logic_vector(31 downto 0) := "00000000000000000000000000000001";    --Set the offset to be 1
 
@@ -556,7 +556,7 @@ begin
         procedure holdPC is
         begin
             SH2PMAUHold            <= PMAU_HOLD;
-            SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
+            SH2PMAUSrcSel           <= PMAU_SRC_SEL_PC;
             PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
             SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
             SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
@@ -567,7 +567,7 @@ begin
         procedure incPC is 
         begin
             SH2PMAUHold            <= PMAU_NO_HOLD;
-            SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
+            SH2PMAUSrcSel           <= PMAU_SRC_SEL_PC;
             SH2PMAUOffsetSel        <= DEFAULT_NO_OFF_VAL;
             SH2PMAUIncDecSel        <= DEFAULT_INC_SEL;
             SH2PMAUIncDecBit        <= DEFAULT_BIT;
@@ -715,12 +715,12 @@ begin
             SH2ALUOpAImmediate        <= DEFAULT_ALU_IMM_OP;
 
             -- Default DMAU inputs
-            SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
+            SH2DMAUSrcSel       <= DMAU_SRC_SEL_IMM;
             SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
             SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
             SH2DMAUIncDecBit    <= DEFAULT_BIT;
             SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
-            DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
+            DMAUImmediateSource <= DMAU_ZERO_IMM;
             DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
 
         end procedure;
