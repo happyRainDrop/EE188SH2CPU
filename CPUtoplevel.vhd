@@ -425,7 +425,7 @@ architecture Structural of CPUtoplevel is
     signal SH2CalculatedDataAddress: std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU output address
     signal HoldCalculatedDataAddress: std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- save DMAU output address
                                                                                                   -- for write on next clock
-    signal SH2DataAddressSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
+    signal DMAUPostIncDecSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
                                                                                         -- (Need control line to see which src)
 
         -- Read and Write flags that the PMAU sets
@@ -540,7 +540,7 @@ begin
             SH2DMAUIncDecBit  => SH2DMAUIncDecBit, 
             SH2DMAUPrePostSel => SH2DMAUPrePostSel, 
             SH2DataAddressBus => SH2CalculatedDataAddress,       -- just GBR?
-            SH2DataAddressSrc => SH2DataAddressSrc
+            SH2DataAddressSrc => DMAUPostIncDecSrc
         );
 
     -- Instantiate PMAU
@@ -1165,11 +1165,21 @@ begin
 
             -- Load from reg address directly
             elsif std_match(MOVB_atRm_TO_Rn, InstructionReg) then
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
 
             elsif std_match(MOVW_atRm_TO_Rn, InstructionReg) then
-            
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
             elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
-                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
 
                 -- Have DMAU take address directly from register
@@ -1177,31 +1187,112 @@ begin
             
             -- Load from reg address + reg address in R0
             elsif std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) then
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+                SH2RegBSel <= 0;                                                  -- Access offset inside R0
+
+                 -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
+
 
             elsif std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) then
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+                SH2RegBSel <= 0;                                                  -- Access offset inside R0
+
+                 -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
 
             elsif std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) then
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+                SH2RegBSel <= 0;                                                  -- Access offset inside R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
 
             -- Load from reg address post-incremented
             elsif std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) then
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
 
             elsif std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) then
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
 
             elsif std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) then
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
 
             -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
             elsif std_match(MOVB_atDispRm_TO_R0, InstructionReg) then
 
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
+
             elsif std_match(MOVW_atDispRm_TO_R0, InstructionReg) then
+
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
 
             elsif std_match(MOVL_atDispRm_TO_Rn, InstructionReg) then
 
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
+
             -- Load from dis * (1,2,4) + GBR (into R0)
+            --------------------------------------------------------------------------- TODO: Pop GBR out as its own reg
             elsif std_match(MOV_B_R0_GBR, InstructionReg) then
 
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
+
             elsif std_match(MOV_W_R0_GBR, InstructionReg) then
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
 
             elsif std_match(MOV_L_R0_GBR, InstructionReg) then
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
 
             --  ==================================================================================================
             -- STORE
@@ -1304,7 +1395,7 @@ begin
 
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
-                DMAUImmediateOffset <= std_logic_vector(resize(unsigned(InstructionReg(3 downto 0)), regLen)); -- zero-padded immediate
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
 
             elsif std_match(MOVW_R0_TO_atDispRn, InstructionReg) then
@@ -1315,7 +1406,7 @@ begin
 
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
-                DMAUImmediateOffset <= std_logic_vector(resize(unsigned(InstructionReg(3 downto 0)), regLen)); -- zero-padded immediate
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
 
             elsif std_match(MOVL_Rm_TO_atDispRn, InstructionReg) then
@@ -1326,15 +1417,31 @@ begin
 
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
-                DMAUImmediateOffset <= std_logic_vector(resize(unsigned(InstructionReg(3 downto 0)), regLen)); -- zero-padded immediate
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
 
-            -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR)
+            -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR) 
+            ----------------------------------------------------------------------------------- TODO: Move GBR back into RegArray
             elsif std_match(MOV_B_GBR_R0, InstructionReg) then
+
+                -- Have DMAU sum the immediate and GBR address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
 
             elsif std_match(MOV_W_GBR_R0, InstructionReg) then
 
+                -- Have DMAU sum the immediate and GBR address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
+
             elsif std_match(MOV_L_GBR_R0, InstructionReg) then
+
+                -- Have DMAU sum the immediate and GBR address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
 
             --  ==================================================================================================
             -- SYSTEM CONTROL
@@ -1400,7 +1507,7 @@ begin
                     HoldRegA2(7 downto 0) <= RegArrayOutA2(7 downto 0);
                 when others =>
                     -- should never get here
-                end case;
+            end case;
         end procedure;
 
         -- Make sure low word of Rm is put in the place where we memory will be reading it from!
@@ -1416,6 +1523,38 @@ begin
                     HoldRegA2(23 downto 8) <= RegArrayOutA2(15 downto 0);
                 when 2 => -- Store starting from second lowest byte
                     HoldRegA2(15 downto 0) <= RegArrayOutA2(15 downto 0);
+                when others =>
+                    -- should never get here
+            end case;
+        end procedure;
+
+        -- Make sure SH2RegIn is taking the correct byte from the SH2DataBus
+        procedure ReadBSetSH2RegIn is
+        begin
+            case addressIndexInternal is
+                when 0 => -- Grab highest byte
+                    SH2RegIn <= std_logic_vector(resize(signed(SH2DataBus(31 downto 24)), regLen)); -- sign-extended data bus value
+                when 1 => -- Grab second highest byte
+                    SH2RegIn <= std_logic_vector(resize(signed(SH2DataBus(23 downto 16)), regLen)); -- sign-extended data bus value
+                when 2 => -- Grab second lowest byte
+                    SH2RegIn <= std_logic_vector(resize(signed(SH2DataBus(15 downto 8)), regLen)); -- sign-extended data bus value
+                when 3 => -- Grab lowest byte
+                    SH2RegIn <= std_logic_vector(resize(signed(SH2DataBus(7 downto 0)), regLen)); -- sign-extended data bus value
+                when others =>
+                    -- should never get here
+            end case;
+        end procedure;
+
+        -- Make sure SH2RegIn is taking the correct word from the SH2DataBus
+        procedure ReadWSetSH2RegIn is
+        begin
+            case addressIndexInternal is
+                when 0 => -- Grab highest word
+                    SH2RegIn <= std_logic_vector(resize(signed(SH2DataBus(31 downto 16)), regLen)); -- sign-extended data bus value
+                when 1 => -- Grab middle word
+                    SH2RegIn <= std_logic_vector(resize(signed(SH2DataBus(23 downto 8)), regLen)); -- sign-extended data bus value
+                when 2 => -- Grab lowest word
+                    SH2RegIn <= std_logic_vector(resize(signed(SH2DataBus(15 downto 0)), regLen)); -- sign-extended data bus value
                 when others =>
                     -- should never get here
             end case;
@@ -1745,7 +1884,21 @@ begin
             -- Load from reg address directly
             elsif std_match(MOVB_atRm_TO_Rn, InstructionReg) then
 
+                -- Store data bus data into Rn
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+                
+                ReadFromMemoryB <= READ_FROM_MEMORY;
+
             elsif std_match(MOVW_atRm_TO_Rn, InstructionReg) then
+
+                -- Store data bus data into Rn
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY;
 
             elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
 
@@ -1759,30 +1912,128 @@ begin
             -- Load from reg address + reg address in R0
             elsif std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) then
 
+                -- Store data bus data into R0
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+                
+                ReadFromMemoryB <= READ_FROM_MEMORY;
+
             elsif std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) then
 
+                -- Store data bus data into R0
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+                
+                ReadFromMemoryW <= READ_FROM_MEMORY;
+
             elsif std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) then
+
+                -- Store data bus data into Rn
+                SH2RegIn <= SH2DataBus;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+                
+                ReadFromMemoryL <= READ_FROM_MEMORY;
 
             -- Load from reg address post-incremented
             elsif std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) then
 
+                -- Store data bus data into Rn
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                -- Store new calculated address into Rm
+                SH2RegAxIn <= DMAUPostIncDecSrc;
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 downto 4)));  -- Store inside register Rm
+                SH2RegAxStore <= REG_STORE;
+                
+                ReadFromMemoryB <= READ_FROM_MEMORY;
+
             elsif std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) then
 
+                -- Store data bus data into Rn
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                -- Store new calculated address into Rm
+                SH2RegAxIn <= DMAUPostIncDecSrc;
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 downto 4)));  -- Store inside register Rm
+                SH2RegAxStore <= REG_STORE;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY;
+
             elsif std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) then
+
+                -- Store data bus data into Rn
+                SH2RegIn <= SH2DataBus;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                -- Store new calculated address into Rm
+                SH2RegAxIn <= DMAUPostIncDecSrc;
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 downto 4)));  -- Store inside register Rm
+                SH2RegAxStore <= REG_STORE;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY;
 
             -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
             elsif std_match(MOVB_atDispRm_TO_R0, InstructionReg) then
 
+                -- Store data bus data into Rn
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= 0;  -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+                
+                ReadFromMemoryB <= READ_FROM_MEMORY;
+
             elsif std_match(MOVW_atDispRm_TO_R0, InstructionReg) then
+
+                -- Store data bus data into Rn
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= 0;  -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+                
+                ReadFromMemoryW <= READ_FROM_MEMORY;
 
             elsif std_match(MOVL_atDispRm_TO_Rn, InstructionReg) then
 
+                -- Store data bus data into Rn
+                SH2RegIn <= SH2DataBus;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+                
+                ReadFromMemoryL <= READ_FROM_MEMORY;
+                
             -- Load from dis * (1,2,4) + GBR (into R0)
             elsif std_match(MOV_B_R0_GBR, InstructionReg) then
+                -- Store data bus data into R0
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= 0;  -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+
+                ReadFromMemoryB <= READ_FROM_MEMORY;
 
             elsif std_match(MOV_W_R0_GBR, InstructionReg) then
 
+                -- Store data bus data into R0
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= 0;  -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY;
+
             elsif std_match(MOV_L_R0_GBR, InstructionReg) then
+
+                -- Store data bus data into R0
+                SH2RegIn <= SH2DataBus; -- sign-extended data bus value
+                SH2RegInSel <= 0;  -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY;
 
             --  ==================================================================================================
             -- STORE
@@ -1822,14 +2073,29 @@ begin
                 WriteBUpdateHoldRegA2Val;
                 WriteToMemoryB <= WRITE_TO_MEMORY;
 
+                -- Update Rn with pre-decremented address
+                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); -- Store inside register Rn
+                SH2RegAxStore <= REG_STORE;
+
             elsif std_match(MOVW_Rm_TO_atPreDecRn, InstructionReg) then
 
                 WriteWUpdateHoldRegA2Val;
                 WriteToMemoryW <= WRITE_TO_MEMORY;
 
+                -- Update Rn with pre-decremented address
+                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); -- Store inside register Rn
+                SH2RegAxStore <= REG_STORE;
+
             elsif std_match(MOVL_Rm_TO_atPreDecRn, InstructionReg) then
 
                 WriteToMemoryL <= WRITE_TO_MEMORY;
+
+                -- Update Rn with pre-decremented address
+                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); -- Store inside register Rn
+                SH2RegAxStore <= REG_STORE;
 
             -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*disp)
             elsif std_match(MOVB_R0_TO_atDispRn, InstructionReg) then
