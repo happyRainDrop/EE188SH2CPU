@@ -116,13 +116,12 @@ package SH2_CPU_Constants is
     constant NUM_ADDRESS_BUS_OPTIONS : integer := 4; -- DMAU, PMAU, regs, hold, open
     constant OPEN_DATA_BUS : integer := 0;
     constant HOLD_DATA_BUS : integer := 1;
-    constant SET_DATA_BUS_TO_REG_A_OUT : integer := 2;
+    constant SET_DATA_BUS_TO_REG_A2_OUT : integer := 2;
     constant SET_DATA_BUS_TO_ALU_OUT : integer := 3;
     constant OPEN_ADDRESS_BUS : integer := 0;
     constant HOLD_ADDRESS_BUS : integer := 1;
     constant SET_ADDRESS_BUS_TO_PMAU_OUT : integer := 2;
     constant SET_ADDRESS_BUS_TO_DMAU_OUT : integer := 3;
-    constant SET_ADDRESS_BUS_TO_REG_A2_OUT : integer := 4;
 
     -- Holding settings for DMAU and PMAU; ensures that the register 
     -- is held at current value by decrementing by 1 and adding 1 as offset
@@ -419,6 +418,8 @@ architecture Structural of CPUtoplevel is
     signal DMAUImmediateOffset :  std_logic_vector(regLen-1 downto 0) := (others => '0');
     -- DMAU OUTPUTS
     signal SH2CalculatedDataAddress: std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU output address
+    signal HoldCalculatedDataAddress: std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- save DMAU output address
+                                                                                                  -- for write on next clock
     signal SH2DataAddressSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
                                                                                         -- (Need control line to see which src)
 
@@ -663,13 +664,13 @@ begin
                 when FETCH_IR =>
                     
                     if (WriteToMemoryL = WRITE_TO_MEMORY) then
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
-                        SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
+                        SH2SelDataBus <= SET_DATA_BUS_TO_REG_A2_OUT;
                         WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
                     end if;
 
                     if (ReadFromMemoryL = READ_FROM_MEMORY) then
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
                         SH2SelDataBus <= OPEN_DATA_BUS;
                         RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0';  -- assume address, data bus correctly set in instruction matching
                     end if;
@@ -730,11 +731,6 @@ begin
         if CurrentState = FETCH_IR then
             --Default all the units
             SetDefaultControlSignals;
-
-            -- Save the values of the registers for execute state, which is a clock after the instruction
-            HoldRegA <= RegArrayOutA;
-            HoldRegA2 <= RegArrayOutA2;
-            -- PrevIR <= InstructionReg;
 
             --  ==================================================================================================
             -- ARITHMETIC
@@ -1077,21 +1073,28 @@ begin
                 SH2ALUCmd                   <= ALU_FB_SEL; 
             
             --  ==================================================================================================
-            -- MOV (Data Transfer)
+            -- LOAD
             --  ==================================================================================================
             elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
 
-                 -- Setting Reg Array control signals                                             
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access address inside register Rm (at index m)
+                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access address inside register Rm (at index m)
+
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+            --  ==================================================================================================
+            -- STORE
+            --  ==================================================================================================
 
             elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
 
                 -- Setting Reg Array control signals                                             
-                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
-            
-                report "HoldRegA = x""" & to_hstring(RegArrayOutA) & """";
-                report "HoldRegA2 = x""" & to_hstring(RegArrayOutA2) & """";
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
+
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
 
             --  ==================================================================================================
             -- SYSTEM CONTROL
@@ -1141,6 +1144,10 @@ begin
         if CurrentState = FETCH_IR and rising_edge(SH2Clock) then
 
             SetDefaultExecuteSignals;
+
+            -- Save the values of the registers for execute state, which is a clock after the instruction
+            HoldRegA2 <= RegArrayOutA2;
+            HoldCalculatedDataAddress <= SH2CalculatedDataAddress;
 
             --  ==================================================================================================
             -- ARITHMETIC
@@ -1440,16 +1447,21 @@ begin
                 SH2RegStore     <= REG_STORE;
 
             --  ==================================================================================================
-            -- MOV
+            -- LOAD
             --  ==================================================================================================
 
             elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
 
+                -- Store data bus data into Rn
                 SH2RegIn <= SH2DataBus;
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access value inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
                 
                 ReadFromMemoryL <= READ_FROM_MEMORY;
+
+            --  ==================================================================================================
+            -- STORE
+            --  ==================================================================================================
 
             elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
                 WriteToMemoryL <= WRITE_TO_MEMORY;
@@ -1462,14 +1474,13 @@ begin
 
     -- Set buses (This is combinational, outside of any clocked process.)
     SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
-        HoldRegA when SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT else
+        HoldRegA2 when SH2SelDataBus = SET_DATA_BUS_TO_REG_A2_OUT else
         SH2ALUResult when SH2SelDataBus = SET_DATA_BUS_TO_ALU_OUT else
             (others => 'Z');
 
     SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
-        SH2CalculatedDataAddress when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
+        HoldCalculatedDataAddress when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
     std_logic_vector(to_unsigned(4 * to_integer(unsigned(SH2PC)), SH2AddressBus'length)) when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
-    HoldRegA2 when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT else
             (others => 'Z');
 
 
