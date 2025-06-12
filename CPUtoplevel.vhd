@@ -930,6 +930,7 @@ begin
                 --Setting Reg Array control signals
                 SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
                 SH2RegA2Sel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegA1Sel         <= REG_SR;
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1000";
@@ -940,6 +941,7 @@ begin
                 SH2RegASel  <= REG_ZEROTH_SEL;
                 SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
                 SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
+                SH2RegA1Sel         <= REG_SR;
 
                 --Setting ALU control signals
                 SH2FCmd                     <= "1000";
@@ -1229,7 +1231,6 @@ begin
             
             elsif std_match(TST_Rm_Rn, InstructionReg) then    
                 if std_match(SH2ALUResult, REG_LEN_ZEROES) then 
-                    SH2RegA1Sel         <= REG_SR;
                     RegArrayOutA1(0)    <= '1';
                     SH2RegAxIn          <= RegArrayOutA1;
                     SH2RegAxInSel       <= REG_SR;
@@ -1238,7 +1239,6 @@ begin
 
             elsif std_match(TST_imm_R0, InstructionReg) then
                 if std_match(SH2ALUResult, REG_LEN_ZEROES) then 
-                SH2RegA1Sel         <= REG_SR;
                 RegArrayOutA1(0)    <= '1';
                 SH2RegAxIn          <= RegArrayOutA1;
                 SH2RegAxInSel       <= REG_SR;
