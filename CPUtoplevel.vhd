@@ -186,8 +186,6 @@ package SH2_CPU_Constants is
     constant NO_READ_FROM_MEMORY : std_logic := '0';
     constant WORD_MASK  : std_logic_vector(31 downto 0) := "00000000000000000000000011111111";
     constant BYTE_MASK  : std_logic_vector(31 downto 0) := "00000000000000001111111111111111";
-    constant WORD_MASK  : std_logic_vector(31 downto 0) := "00000000000000000000000011111111";
-    constant BYTE_MASK  : std_logic_vector(31 downto 0) := "00000000000000001111111111111111";
    
 
 end SH2_CPU_Constants;
@@ -405,10 +403,6 @@ architecture Structural of CPUtoplevel is
     -- based on whether it's signed or not)
     -- before giving us immediate operand
     signal SH2ALUOpAUseImmediateOperand   : std_logic; -- 1 for use immediate operand, 0 otherwise
-    signal SH2ALUOpAImmediate      : std_logic_vector(regLen-1 downto 0) := (others => '0'); -- control unit should pad it (with 1s or 0s
-    -- based on whether it's signed or not)
-    -- before giving us immediate operand
-    signal SH2ALUOpAUseImmediateOperand   : std_logic; -- 1 for use immediate operand, 0 otherwise
     -- ALU OUTPUTS
     signal SH2ALUResult   : std_logic_vector(regLen - 1 downto 0) := (others => '0');            -- ALU result
     signal FlagBus        : std_logic_vector(4 downto 0) := (others => '0');                     -- Flags are Cout, HalfCout, Overflow, Zero, Sign
@@ -511,8 +505,6 @@ begin
             SH2ALUOpA   => RegArrayOutA,              -- Control unit will set operands,
             SH2ALUOpB   => RegArrayOutA2,              -- to be output from the register array (if they so exist)
             SH2ALUImmediateOperand => SH2ALUImmediateOperand,           -- can also be immediate (in instruction)
-            SH2ALUOpAImmediate => SH2ALUOpAImmediate,
-            SH2ALUOpAUseImmediateOperand => SH2ALUOPAUseImmediateOperand,
             SH2ALUOpAImmediate => SH2ALUOpAImmediate,
             SH2ALUOpAUseImmediateOperand => SH2ALUOPAUseImmediateOperand,
             SH2ALUUseImmediateOperand => SH2ALUUseImmediateOperand, 
@@ -706,10 +698,6 @@ begin
         --Temproary variable to help with the subtractions with carrys
         variable SubCarryBus    : std_logic_vector(regLen-1 downto 0) := (others => '0');
 
-        
-        --Temproary variable to help with the subtractions with carrys
-        variable SubCarryBus    : std_logic_vector(regLen-1 downto 0) := (others => '0');
-
         procedure SetDefaultControlSignals is
         begin
             -- Default RegArray inputs: Do not input any registers, 
@@ -723,8 +711,6 @@ begin
             SH2ALUCmd                 <= DEFAUL_ALU_CMD;
             SH2ALUImmediateOperand    <= DEFAULT_ALU_IMM_OP;
             SH2ALUUseImmediateOperand <= DEFAULT_ALU_USE_IMM;
-            SH2ALUOpAUseImmediateOperand <= DEFAULT_ALU_USE_IMM;
-            SH2ALUOpAImmediate        <= DEFAULT_ALU_IMM_OP;
             SH2ALUOpAUseImmediateOperand <= DEFAULT_ALU_USE_IMM;
             SH2ALUOpAImmediate        <= DEFAULT_ALU_IMM_OP;
 
@@ -819,14 +805,9 @@ begin
                 --Setting ALU control signals
                 --To do: Rn - Rm - T => Rn - (Rm + T)
                 SubCarryBus := std_logic_vector(to_unsigned(
-                SubCarryBus := std_logic_vector(to_unsigned(
                     to_integer(unsigned(RegArrayOutA2)) +
                     to_integer(unsigned(std_logic_vector'("0" & RegArrayOutA1(0)))),
                     RegArrayOutA2'length));
-
-                SH2ALUImmediateOperand       <= SubCarryBus;
-                SH2ALUUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value for OpB
-
 
                 SH2ALUImmediateOperand       <= SubCarryBus;
                 SH2ALUUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value for OpB
@@ -853,17 +834,12 @@ begin
                 -- Setting register ops for ALU
                 SH2ALUOpAImmediate              <= DEFAULT_ALU_IMM_OP;
                 SH2ALUOpAUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value
-                -- Setting register ops for ALU
-                SH2ALUOpAImmediate              <= DEFAULT_ALU_IMM_OP;
-                SH2ALUOpAUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value
                 SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
 
                 --Setting ALU control signals
                 SH2FCmd                  <= "0101";  --Use not OpB for the Adder
-                SH2FCmd                  <= "0101";  --Use not OpB for the Adder
                 SH2CinCmd                <= "01";    --Use the 1 option into the Adder
                                                         --(makes one's complement -> two's complement to do subtraction)
-                SH2ALUCmd                <= "01";    --Select the Adder Output    
                 SH2ALUCmd                <= "01";    --Select the Adder Output    
             
             elsif std_match(InstructionReg, NEGC_Rm_Rn) then
@@ -887,29 +863,8 @@ begin
                 SH2CinCmd                   <= "01";    --Use the 1 option into the Adder
                                                         --(makes one's complement -> two's complement to do subtraction)
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
-                -- Setting register ops for ALU
-                SH2ALUOpAImmediate              <= DEFAULT_ALU_IMM_OP;
-                SH2ALUOpAUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
-                SH2RegA1Sel                 <= REG_SR;  --Grab the status register to get the T bit
-
-                --Setting ALU control signals
-                --To do: 0 - Rm - T => 0 - (Rm + T)
-                SubCarryBus := std_logic_vector(to_unsigned(
-                    to_integer(unsigned(RegArrayOutA2)) +
-                    to_integer(unsigned(std_logic_vector'("0" & RegArrayOutA1(0)))),
-                    RegArrayOutA2'length));
-
-                SH2ALUImmediateOperand       <= SubCarryBus;
-                SH2ALUUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value for OpB
-
-                SH2FCmd                     <= "0101";  --Use not OpB for the Adder
-                SH2CinCmd                   <= "01";    --Use the 1 option into the Adder
-                                                        --(makes one's complement -> two's complement to do subtraction)
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
 
             elsif std_match(InstructionReg, EXTS_B_Rm_Rn) then    
-                
                 
             elsif std_match(InstructionReg, EXTS_W_Rm_Rn) then  
 
@@ -954,30 +909,7 @@ begin
             elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
             elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
 
-                -- Setting register ops for ALU
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
-                SH2ALUImmediateOperand <= "00000000000000000000000000000001";
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
-                SH2RegA1Sel <= REG_SR;
 
-                --Setting ALU control signals
-                SH2FCmd                     <= "0101";  --Use not OpB for the Adder
-                SH2CinCmd                   <= "01";    --Use the 1 option into the Adder
-                                                        --(makes one's complement -> two's complement to do subtraction)
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
-                                
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-
-
-            --  ==================================================================================================
             --  ==================================================================================================
             -- SHIFTS (0/8) : Needs testing
             --  ==================================================================================================
@@ -1163,13 +1095,10 @@ begin
 
             --  ==================================================================================================
             -- SYSTEM CONTROL
-            -- SYSTEM CONTROL
             --  ==================================================================================================
             elsif std_match(NOP, InstructionReg) then
 
                 SetDefaultControlSignals;
-
-            elsif std_match(SETT, InstructionReg) then
 
             elsif std_match(SETT, InstructionReg) then
 
@@ -1188,9 +1117,6 @@ begin
             -- Set default instruction-specific control signals
         -- Does not include PMAU and address/data bus setting logic, because that is determined
         -- by the state machine
-
-        variable FlagUpdate    : std_logic_vector(regLen-1 downto 0) := (others => '0');
-
 
         variable FlagUpdate    : std_logic_vector(regLen-1 downto 0) := (others => '0');
 
@@ -1242,12 +1168,7 @@ begin
 
                 FlagUpdate(0) := not FlagBus(FLAG_INDEX_CARRYOUT);                   --Load into Status Register the new Carryout
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_CARRYOUT);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
                 SH2RegAxStore <= REG_STORE;                                         --Update the value  
 
             elsif std_match(InstructionReg, ADDV_Rm_Rn) then
@@ -1260,12 +1181,7 @@ begin
 
                 FlagUpdate(0) := not FlagBus(FLAG_INDEX_OVERFLOW);                   --Load into Status Register the new Carryout
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_OVERFLOW);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                 --Actually write 
                 SH2RegAxStore <= REG_STORE;                                         --Update the value                                 --Actually write 
 
             elsif std_match(InstructionReg, SUB_Rm_Rn) then
@@ -1284,13 +1200,7 @@ begin
 
                 FlagUpdate(0) := not FlagBus(FLAG_INDEX_CARRYOUT);                   --Load into Status Register the new Carryout
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_CARRYOUT);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                         --Actually write 
                 SH2RegAxStore <= REG_STORE;                                         --Update the value                                         --Actually write 
 
             elsif std_match(InstructionReg, SUBV_Rm_Rn) then
@@ -1303,66 +1213,7 @@ begin
 
                 FlagUpdate(0) := not FlagBus(FLAG_INDEX_OVERFLOW);                   --Load into Status Register the new Carryout
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_OVERFLOW);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                            --Actually write 
-
-            elsif std_match(InstructionReg, NEG_Rm_Rn) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Update the value    
-                
-
-            elsif std_match(InstructionReg, NEGC_Rm_Rn) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Update the value
-                
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_CARRYOUT);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value   
-
-            elsif std_match(InstructionReg, EXTU_B_Rm_Rn) then  
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;     
-        
-            elsif std_match(InstructionReg, EXTU_W_Rm_Rn) then  
-                
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;     
-
-            elsif std_match(InstructionReg, EXTS_B_Rm_Rn) then  
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;     
-        
-            elsif std_match(InstructionReg, EXTS_W_Rm_Rn) then  
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;     
-            
-            elsif std_match(InstructionReg, DT_Rn) then
-                if std_match(SH2ALUResult, ALU_ZERO_IMM) then
-                    SH2RegIn <= RegArrayOutA1(regLen - 1 downto 1) & '1';
-                    SH2RegInSel <= REG_SR;
-                    SH2RegStore <= REG_STORE;       
-                else
-                    SH2RegIn <= RegArrayOutA1(regLen - 1 downto 1) & '0';
-                    SH2RegInSel <= REG_SR;
-                    SH2RegStore <= REG_STORE;     
-                end if;
-            
-
                 SH2RegAxStore <= REG_STORE;                                         --Update the value                                            --Actually write 
 
             elsif std_match(InstructionReg, NEG_Rm_Rn) then
@@ -1424,18 +1275,10 @@ begin
             elsif std_match(SHLL_Rn, InstructionReg) then
                 -- Setting Reg Array control signals
                 FlagUpdate := RegArrayOutA2;
-                FlagUpdate := RegArrayOutA2;
 
                 FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
-                
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
                 SH2RegAxStore <= REG_STORE;                                         --Update the value  
                 
                 SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
@@ -1452,12 +1295,7 @@ begin
 
                 FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
                 SH2RegAxStore <= REG_STORE;                                         --Update the value  
             
             elsif std_match(SHAR_Rn, InstructionReg) then
@@ -1470,12 +1308,7 @@ begin
 
                 FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
                 SH2RegAxStore <= REG_STORE;                                         --Update the value  
 
             elsif std_match(SHAL_Rn, InstructionReg) then
@@ -1488,12 +1321,7 @@ begin
 
                 FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
                 SH2RegAxStore <= REG_STORE;                                         --Update the value  
         
             elsif std_match(ROTCL_Rn, InstructionReg) then
@@ -1502,12 +1330,6 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                 
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                          --Update the value   
                 FlagUpdate := RegArrayOutA2;
 
                 FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
@@ -1525,12 +1347,7 @@ begin
 
                 FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
                 SH2RegAxStore <= REG_STORE;                                         --Update the value  
 
             elsif std_match(ROTL_Rn, InstructionReg) then
@@ -1539,11 +1356,6 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;                                           --Actually write
                
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
                 FlagUpdate := RegArrayOutA2;
 
                 FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
@@ -1561,12 +1373,7 @@ begin
 
                 FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
                 SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
                 SH2RegAxStore <= REG_STORE;                                         --Update the value  
             
             --  ==================================================================================================
@@ -1589,18 +1396,12 @@ begin
                     FlagUpdate := RegArrayOutA1;
                     FlagUpdate(0) := '1';                   --Load into Status Register the new Carryout
                     SH2RegAxIn  <= FlagUpdate;              --Write back in Ax which is the Status Register 
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';                   --Load into Status Register the new Carryout
-                    SH2RegAxIn  <= FlagUpdate;              --Write back in Ax which is the Status Register 
                     SH2RegAxInSel       <= REG_SR;
                     SH2RegAxStore       <= REG_STORE;
                 end if;
 
             elsif std_match(TST_imm_R0, InstructionReg) then
                 if std_match(SH2ALUResult, REG_LEN_ZEROES) then 
-                FlagUpdate := RegArrayOutA1;
-                FlagUpdate(0) := '1';                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;              --Write back in Ax which is the Status Register 
                 FlagUpdate := RegArrayOutA1;
                 FlagUpdate(0) := '1';                   --Load into Status Register the new Carryout
                 SH2RegAxIn  <= FlagUpdate;              --Write back in Ax which is the Status Register 
