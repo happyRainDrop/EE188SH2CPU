@@ -810,7 +810,7 @@ begin
                     to_integer(unsigned(std_logic_vector'("0" & RegArrayOutA1(0)))),
                     RegArrayOutA2'length));
                 SH2FCmd                     <= "0101";  --Use not OpB for the Adder
-                SH2CinCmd                <= "01";    --Use the 1 option into the Adder
+                SH2CinCmd                   <= "01";    --Use the 1 option into the Adder
                                                         --(makes one's complement -> two's complement to do subtraction)
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
 
@@ -827,7 +827,30 @@ begin
                                                         --(makes one's complement -> two's complement to do subtraction)
                 SH2ALUCmd                   <= "01";    --Select the Adder Output
 
-            --  ==================================================================================================
+            elsif std_match(InstructionReg, NEG_Rm_Rn) then
+                                -- Setting register ops for ALU
+                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
+
+                --Setting ALU control signals
+                SH2FCmd                     <= "0101";  --Use not OpB for the Adder
+                SH2CinCmd                <= "01";    --Use the 1 option into the Adder
+                                                        --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd                   <= "01";    --Select the Adder Output    
+            
+            elsif std_match(InstructionReg, NEGC_Rm_Rn) then
+
+            elsif std_match(InstructionReg, EXTS_B_Rm_Rn) then    
+
+            elsif std_match(InstructionReg, EXTS_W_Rm_Rn) then  
+
+            elsif std_match(InstructionReg, EXTU_B_Rm_Rn) then  
+
+            elsif std_match(InstructionReg, EXTU_B_Rm_Rn) then  
+
+            elsif std_match(InstructionReg, DT_Rn) then  
+
+                --  ==================================================================================================
             -- SHIFTS (0/8) : Needs testing
             --  ==================================================================================================
             elsif std_match(SHLL_Rn, InstructionReg) then
