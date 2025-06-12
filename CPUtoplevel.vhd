@@ -40,6 +40,7 @@
 --                                  Made intermediate variables for MOV reg outputs.
 --     11 June 25 Ruth Berkun       Update addressbus to reflect 4*PC value (Each longword is 4 apart in memory address now) 
 --     11 June 25 Nerissa Finnen    Updated all Shift commands to new style
+--     12 June 25 Ruth Berkun       Implementing MOV commands (load and store)
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -1310,6 +1311,7 @@ begin
         -- by the state machine
 
         variable FlagUpdate    : std_logic_vector(regLen-1 downto 0) := (others => '0');
+        variable addressIndexInternal : integer range 3 downto 0 := 0;
 
         procedure SetDefaultExecuteSignals is
         begin
@@ -1332,7 +1334,41 @@ begin
 
         end procedure;
 
-        variable addressIndexInternal : integer range 3 downto 0 := 0;
+        -- Make sure low byte of Rm is put in the place where we memory will be reading it from!
+        -- recall, stores read the value to store from HoldRegA2, so we'll modify that
+        procedure WriteBUpdateHoldRegA2Val is
+        begin
+            case addressIndexInternal is
+                when 0 => -- Store in highest byte
+                    HoldRegA2(31 downto 24) <= RegArrayOutA2(7 downto 0);
+                when 1 => -- Store in second highest byte
+                    HoldRegA2(23 downto 16) <= RegArrayOutA2(7 downto 0);
+                when 2 => -- Store in second lowest byte
+                    HoldRegA2(15 downto 8) <= RegArrayOutA2(7 downto 0);
+                when 3 => -- Store in lowest byte
+                    HoldRegA2(7 downto 0) <= RegArrayOutA2(7 downto 0);
+                when others =>
+                    -- should never get here
+                end case;
+        end procedure;
+
+        -- Make sure low word of Rm is put in the place where we memory will be reading it from!
+        -- recall, stores read the value to store from HoldRegA2, so we'll modify that
+        procedure WriteWUpdateHoldRegA2Val is
+        begin
+            -- Make sure low byte of Rm is put in the place where we memory will be reading it from!
+            -- recall, stores read the value to store from HoldRegA2, so we'll modify that
+            case addressIndexInternal is
+                when 0 => -- Store starting from highest byte
+                    HoldRegA2(31 downto 16) <= RegArrayOutA2(15 downto 0);
+                when 1 => -- Store starting from second highest byte
+                    HoldRegA2(23 downto 8) <= RegArrayOutA2(15 downto 0);
+                when 2 => -- Store starting from second lowest byte
+                    HoldRegA2(15 downto 0) <= RegArrayOutA2(15 downto 0);
+                when others =>
+                    -- should never get here
+            end case;
+        end procedure;
 
     begin
 
@@ -1703,37 +1739,13 @@ begin
 
              -- Store value in Rm to RAM address in Rn
             elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
-                -- Make sure low byte of Rm is put in the place where we memory will be reading it from!
-                -- recall, stores read the value to store from HoldRegA2, so we'll modify that
-                case addressIndexInternal is
-                    when 0 => -- Store in highest byte
-                        HoldRegA2(31 downto 24) <= RegArrayOutA2(7 downto 0);
-                    when 1 => -- Store in second highest byte
-                        HoldRegA2(23 downto 16) <= RegArrayOutA2(7 downto 0);
-                    when 2 => -- Store in second lowest byte
-                        HoldRegA2(15 downto 8) <= RegArrayOutA2(7 downto 0);
-                    when 3 => -- Store in lowest byte
-                        HoldRegA2(7 downto 0) <= RegArrayOutA2(7 downto 0);
-                    when others =>
-                        -- should never get here
-                    end case;
 
+                WriteBUpdateHoldRegA2Val; 
                 WriteToMemoryB <= WRITE_TO_MEMORY;
 
             elsif std_match(MOVW_Rm_TO_atRn, InstructionReg) then
-                -- Make sure low word of Rm is put in the place where we memory will be reading it from!
-                -- recall, stores read the value to store from HoldRegA2, so we'll modify that
-                case addressIndexInternal is
-                    when 0 => -- Store starting from highest byte
-                        HoldRegA2(31 downto 16) <= RegArrayOutA2(15 downto 0);
-                    when 1 => -- Store starting from second highest byte
-                        HoldRegA2(23 downto 8) <= RegArrayOutA2(15 downto 0);
-                    when 2 => -- Store starting from second lowest byte
-                        HoldRegA2(15 downto 0) <= RegArrayOutA2(15 downto 0);
-                    when others =>
-                        -- should never get here
-                    end case;
-
+                
+                WriteWUpdateHoldRegA2Val;
                 WriteToMemoryW <= WRITE_TO_MEMORY;
 
             elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
@@ -1741,38 +1753,13 @@ begin
             
             -- Store value in Rm to (RAM address in Rn + RAM address in R0)
             elsif std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) then
-                -- Make sure low byte of Rm is put in the place where we memory will be reading it from!
-                -- recall, stores read the value to store from HoldRegA2, so we'll modify that
-                case addressIndexInternal is
-                    when 0 => -- Store in highest byte
-                        HoldRegA2(31 downto 24) <= RegArrayOutA2(7 downto 0);
-                    when 1 => -- Store in second highest byte
-                        HoldRegA2(23 downto 16) <= RegArrayOutA2(7 downto 0);
-                    when 2 => -- Store in second lowest byte
-                        HoldRegA2(15 downto 8) <= RegArrayOutA2(7 downto 0);
-                    when 3 => -- Store in lowest byte
-                        HoldRegA2(7 downto 0) <= RegArrayOutA2(7 downto 0);
-                    when others =>
-                        -- should never get here
-                    end case;
-
+                
+                WriteBUpdateHoldRegA2Val;
                 WriteToMemoryB <= WRITE_TO_MEMORY;
 
             elsif std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) then
-                -- Make sure low word of Rm is put in the place where we memory will be reading it from!
-                -- recall, stores read the value to store from HoldRegA2, so we'll modify that
-
-                case addressIndexInternal is
-                    when 0 => -- Store starting from highest byte
-                        HoldRegA2(31 downto 16) <= RegArrayOutA2(15 downto 0);
-                    when 1 => -- Store starting from second highest byte
-                        HoldRegA2(23 downto 8) <= RegArrayOutA2(15 downto 0);
-                    when 2 => -- Store starting from second lowest byte
-                        HoldRegA2(15 downto 0) <= RegArrayOutA2(15 downto 0);
-                    when others =>
-                        -- should never get here
-                    end case;
-
+                
+                WriteWUpdateHoldRegA2Val;
                 WriteToMemoryW <= WRITE_TO_MEMORY;
 
             elsif std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) then
