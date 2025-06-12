@@ -11,6 +11,22 @@
 --  Entities included are:
 --     SH2DMAU  - SH2 data memory access unit
 --
+-- Entity SH2DMAU description:
+--  Inputs:
+--    SH2DMAURegSource
+--    SH2DMAUImmediateSource
+--    SH2DMAURegOffset
+--    SH2DMAUImmediateOffset
+--    SH2DMAUSrcSel     - source to use (log srccnt bits)
+--    SH2DMAUOffsetSel  - offset to use (log offsetcnt bits)
+--    SH2DMAUIncDecSel  - whether to increment (0) or decrement (1) address source
+--    SH2DMAUIncDecBit  - bit of address source to increment/decrement
+--    SH2DMAUPrePostSel - whether to pre- (0) or post- (1) inc/dec address source
+--
+--  Outputs:
+--    SH2DataAddressBus    - address bus (wordsize bits)
+--    SH2DataAddressSrc - incremented/decremented source (wordsize bits)
+--
 --  Revision History:
 --     24 Apr 25  Ruth Berkun       Copied over from mau.vhd template
 --      3 May 25  Ruth Berkun       Fix shifting syntax error, added constants package
@@ -59,7 +75,7 @@ entity  SH2DMAU  is
         SH2DMAUImmediateOffset :  in std_logic_vector(regLen-1 downto 0);
         SH2DMAUSrcSel     : in      integer  range dmauSourceCount - 1 downto 0;
         SH2DMAUOffsetSel  : in      integer  range dmauOffsetCount - 1 downto 0;
-        SH2DMAUIncDecSel  : in      std_logic;
+        SH2DMAUIncDecSel  : in      std_logic;          
         SH2DMAUIncDecBit  : in      integer  range maxIncDecBitDMAU downto 0;
         SH2DMAUPrePostSel : in      std_logic;
         SH2DataAddressBus    : out     std_logic_vector(regLen - 1 downto 0);
@@ -135,7 +151,7 @@ begin
             SrcSel     => SH2DMAUSrcSel,
             AddrOff    => SH2DMAUAddrOff,
             OffsetSel  => SH2DMAUOffsetSel,
-            IncDecSel  => SH2DMAUIncDecSel,
+            IncDecSel  => SH2DMAUIncDecSel, 
             IncDecBit  => SH2DMAUIncDecBit,
             PrePostSel => SH2DMAUPrePostSel,
 

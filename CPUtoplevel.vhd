@@ -75,6 +75,12 @@ package SH2_CPU_Constants is
     constant DMAU_OFFSET_SEL_IMM_OFFSET_x2 : integer := 5;
     constant DMAU_OFFSET_SEL_IMM_OFFSET_x4 : integer := 6;
 
+    -- DMAU and PMAU inc/dec select
+    constant MAU_INC_SEL : std_logic := '0';
+    constant MAU_DEC_SEL : std_logic := '1';
+    constant MAU_PRE_SEL : std_logic := '0';
+    constant MAU_POST_SEL : std_logic := '1';
+
     -- PMAU configuration
     constant pmauSourceCount  : integer := 3;    -- from reg array, PC, or immediate
     constant pmauOffsetCount  : integer := 7;    -- 0, R0x1, R0x2, R0x4, Immx1, Immx2, Immx4
@@ -123,9 +129,9 @@ package SH2_CPU_Constants is
     constant PMAU_HOLD         : std_logic := '0';     --Holds the PC value in the PMAU
     constant PMAU_NO_HOLD         : std_logic := '1';     --Does not hold the PC value in the PMAU
     constant DEFAULT_SRC_SEL    : integer := 0;         --May change due to PC/GBR location moving
-    constant DEFAULT_DEC_SEL    : std_logic := '1';     --Select decrement
+    constant DEFAULT_DEC_SEL    : std_logic := MAU_DEC_SEL;     --Select decrement
     constant DEFAULT_BIT    : integer := 0;         --Only 0th bit to modify
-    constant DEFAULT_POST_SEL   : std_logic := '1';     --Post decrement and preserve the initial value
+    constant DEFAULT_POST_SEL   : std_logic := MAU_POST_SEL;     --Post decrement and preserve the initial value
     constant DEFAULT_OFFSET_SEL : integer := 4;         --Select immediate offset multiplied by 1
     constant DEFAULT_OFFSET_VAL : std_logic_vector(31 downto 0) := "00000000000000000000000000000001";    --Set the offset to be 1
 
@@ -406,8 +412,7 @@ architecture Structural of CPUtoplevel is
     signal DMAUImmediateSource :  std_logic_vector(regLen-1 downto 0) := (others => '0');
     signal DMAUImmediateOffset :  std_logic_vector(regLen-1 downto 0) := (others => '0');
     -- DMAU OUTPUTS
-    signal SH2DataAddressBus : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
-                                                                                        -- (Need control line to see which src)
+    signal SH2CalculatedDataAddress: std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU output address
     signal SH2DataAddressSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
                                                                                         -- (Need control line to see which src)
 
@@ -514,7 +519,7 @@ begin
             SH2DMAUIncDecSel  => SH2DMAUIncDecSel, 
             SH2DMAUIncDecBit  => SH2DMAUIncDecBit, 
             SH2DMAUPrePostSel => SH2DMAUPrePostSel, 
-            SH2DataAddressBus => SH2DataAddressBus,       -- just GBR?
+            SH2DataAddressBus => SH2CalculatedDataAddress,       -- just GBR?
             SH2DataAddressSrc => SH2DataAddressSrc
         );
 
@@ -655,19 +660,10 @@ begin
                     -- nothing to do
 
                 when LOAD =>
-                    if (WriteToMemory = WRITE_TO_MEMORY) then
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_B_OUT;
+                    if (WriteToMemoryL = WRITE_TO_MEMORY) then
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
                         SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
                         WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
-                    
-                        report "YIPEE falling";
-                        report "    SH2SelAddressBus = " & integer'image(SH2SelAddressBus);
-                        report "    SH2SelDataBus = " & integer'image(SH2SelAddressBus);
-                        report "    DataBus = x""" & to_hstring(SH2DataBus) & """";
-                        report "    RegA = x""" & to_hstring(RegArrayOutA) & """";
-                        report "    AddressBus = x""" & to_hstring(SH2AddressBus) & """";
-                        report "    RegB = x""" & to_hstring(RegArrayOutB) & """";
-                        report "    WE0 = " & std_ulogic'image(WE0);
 
                     end if;
 
@@ -1307,7 +1303,7 @@ begin
             (others => 'Z');
 
     SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
-        SH2DataAddressSrc when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
+        SH2CalculatedDataAddress when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
     std_logic_vector(to_unsigned(4 * to_integer(unsigned(SH2PC)), SH2AddressBus'length)) when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
     HoldRegA2 when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT else
             (others => 'Z');
