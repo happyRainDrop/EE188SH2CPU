@@ -250,35 +250,38 @@ package SH2_IR_Constants is
     constant MOV_W_PC_DISP_TO_Rn  : std_logic_vector(15 downto 0) := "1001------------"; -- MOV.W @(disp,PC), Rn
     constant MOV_L_PC_DISP_TO_Rn  : std_logic_vector(15 downto 0) := "1101------------"; -- MOV.L @(disp,PC), Rn
     constant MOV_Rm_TO_Rn         : std_logic_vector(15 downto 0) := "0110--------0011"; -- MOV Rm, Rn
-    constant MOVB_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010--------0000"; -- MOV.B Rm, @Rn
-    constant MOVW_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010--------0001"; -- MOV.W Rm, @Rn
-    constant MOVL_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010--------0010"; -- MOV.L Rm, @Rn
+    constant MOVA_PC_R0 : std_logic_vector(15 downto 0) := "11000111--------";           -- MOVA @(disp,PC),R0
+    constant MOVT_Rn : std_logic_vector(15 downto 0) := "0000----00101001";              -- MOVT Rn
     constant MOVB_atRm_TO_Rn      : std_logic_vector(15 downto 0) := "0110--------0000"; -- MOV.B @Rm, Rn
     constant MOVW_atRm_TO_Rn      : std_logic_vector(15 downto 0) := "0110--------0001"; -- MOV.W @Rm, Rn
     constant MOVL_atRm_TO_Rn      : std_logic_vector(15 downto 0) := "0110--------0010"; -- MOV.L @Rm, Rn
-    constant MOVB_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010--------0100"; -- MOV.B Rm, @–Rn
-    constant MOVW_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010--------0101"; -- MOV.W Rm, @–Rn
-    constant MOVL_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010--------0110"; -- MOV.L Rm, @–Rn
+    constant MOVB_atR0Rm_TO_Rn    : std_logic_vector(15 downto 0) := "0000--------1100"; -- MOV.B @(R0,Rm),Rn
+    constant MOVW_atR0Rm_TO_Rn    : std_logic_vector(15 downto 0) := "0000--------1101"; -- MOV.W @(R0,Rm),Rn  
+    constant MOVL_atR0Rm_TO_Rn    : std_logic_vector(15 downto 0) := "0000--------1110";    -- MOV.L @(R0,Rm),Rn
     constant MOVB_atPostIncRm_TO_Rn : std_logic_vector(15 downto 0) := "0110--------0100"; -- MOV.B @Rm+, Rn
     constant MOVW_atPostIncRm_TO_Rn : std_logic_vector(15 downto 0) := "0110--------0101"; -- MOV.W @Rm+, Rn
     constant MOVL_atPostIncRm_TO_Rn : std_logic_vector(15 downto 0) := "0110--------0110"; -- MOV.L @Rm+, Rn
-    constant MOVB_R0_TO_atDispRn  : std_logic_vector(15 downto 0) := "10000000--------"; -- MOV.B R0, @(disp,Rn)
-    constant MOVW_R0_TO_atDispRn  : std_logic_vector(15 downto 0) := "10000001--------"; -- MOV.W R0, @(disp,Rn)
-    constant MOVL_Rm_TO_atDispRn  : std_logic_vector(15 downto 0) := "0001------------"; -- MOV.L Rm, @(disp,Rn)
     constant MOVB_atDispRm_TO_R0  : std_logic_vector(15 downto 0) := "10000100--------"; -- MOV.B @(disp,Rm), R0
     constant MOVW_atDispRm_TO_R0  : std_logic_vector(15 downto 0) := "10000101--------"; -- MOV.W @(disp,Rm), R0
     constant MOVL_atDispRm_TO_Rn  : std_logic_vector(15 downto 0) := "0101------------"; -- MOV.L @(disp,Rm), Rn
+    constant MOV_B_R0_GBR : std_logic_vector(15 downto 0) := "11000100--------";         -- MOV.B @(disp,GBR), R0
+    constant MOV_W_R0_GBR : std_logic_vector(15 downto 0) := "11000101--------";         -- MOV.W @(disp,GBR), R0
+    constant MOV_L_R0_GBR : std_logic_vector(15 downto 0) := "11000110--------";         -- MOV.L @(disp,GBR), R0
+    constant MOVB_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010--------0000"; -- MOV.B Rm, @Rn
+    constant MOVW_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010--------0001"; -- MOV.W Rm, @Rn
+    constant MOVL_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010--------0010"; -- MOV.L Rm, @Rn
     constant MOVB_Rm_TO_atR0Rn    : std_logic_vector(15 downto 0) := "0000--------0100"; -- MOV.B Rm, @(R0,Rn)
     constant MOVW_Rm_TO_atR0Rn    : std_logic_vector(15 downto 0) := "0000--------0101"; -- MOV.W Rm, @(R0,Rn)  
-    constant MOV_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000--------0110";
-    constant MOV_B_GBR_R0 : std_logic_vector(15 downto 0) := "11000000--------";
-    constant MOV_W_GBR_R0 : std_logic_vector(15 downto 0) := "11000001--------";
-    constant MOV_L_GBR_R0 : std_logic_vector(15 downto 0) := "11000010--------";
-    constant MOV_B_R0_GBR : std_logic_vector(15 downto 0) := "11000100--------";
-    constant MOV_W_R0_GBR : std_logic_vector(15 downto 0) := "11000101--------";
-    constant MOV_L_R0_GBR : std_logic_vector(15 downto 0) := "11000110--------";
-    constant MOVA_PC_R0 : std_logic_vector(15 downto 0) := "11000111--------";
-    constant MOVT_Rn : std_logic_vector(15 downto 0) := "0000----00101001";
+    constant MOVL_Rm_TO_atR0Rn : std_logic_vector(15 downto 0) := "0000--------0110";    -- MOV.L Rm, @(R0,Rn)
+    constant MOVB_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010--------0100"; -- MOV.B Rm, @–Rn
+    constant MOVW_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010--------0101"; -- MOV.W Rm, @–Rn
+    constant MOVL_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010--------0110"; -- MOV.L Rm, @–Rn
+    constant MOVB_R0_TO_atDispRn  : std_logic_vector(15 downto 0) := "10000000--------"; -- MOV.B R0, @(disp,Rn)
+    constant MOVW_R0_TO_atDispRn  : std_logic_vector(15 downto 0) := "10000001--------"; -- MOV.W R0, @(disp,Rn)
+    constant MOVL_Rm_TO_atDispRn  : std_logic_vector(15 downto 0) := "0001------------"; -- MOV.L Rm, @(disp,Rn)
+    constant MOV_B_GBR_R0 : std_logic_vector(15 downto 0) := "11000000--------"; -- MOV.B R0, @(disp,GBR)
+    constant MOV_W_GBR_R0 : std_logic_vector(15 downto 0) := "11000001--------"; -- MOV.W R0, @(disp,GBR)
+    constant MOV_L_GBR_R0 : std_logic_vector(15 downto 0) := "11000010--------"; -- MOV.L R0, @(disp,GBR)
     --constant MUL_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000--------0111";
     --constant MULS_W_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1111";
     --constant MULU_W_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1110";
@@ -322,14 +325,14 @@ package SH2_IR_Constants is
     constant SUB_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1000";
     constant SUBC_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1010";
     constant SUBV_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1011";
-    constant SWAP_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1000";
-    constant SWAP_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1001";
+    constant SWAP_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1000"; -- SWAP.B Rm,Rn
+    constant SWAP_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1001"; -- SWAP.W Rm,Rn
     constant TAS_B_Rn : std_logic_vector(15 downto 0) := "0100----00011011";
     constant TRAPA_imm : std_logic_vector(15 downto 0) := "11000011--------";
     constant TST_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1000";
     constant TST_imm_R0 : std_logic_vector(15 downto 0) := "11001000--------";
     constant TST_B_imm_GBR : std_logic_vector(15 downto 0) := "11001100--------";
-    constant XTRCT_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1101";
+    constant XTRCT_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1101"; -- XTRCT Rm,Rn
     constant XOR_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1010";
     constant XOR_imm_R0 : std_logic_vector(15 downto 0) := "11001010--------";
     constant XOR_B_imm_GBR : std_logic_vector(15 downto 0) := "11001110--------";
@@ -1075,17 +1078,57 @@ begin
             --  ==================================================================================================
             -- LOAD
             --  ==================================================================================================
-            elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
+            -- Load immediate
+            elsif std_match(MOV_IMM_TO_Rn, InstructionReg) then
 
+            -- Load from reg address directly
+            elsif std_match(MOVB_atRm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVW_atRm_TO_Rn, InstructionReg) then
+            
+            elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
                  -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
-                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access address inside register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
 
                 -- Have DMAU take address directly from register
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+            
+            -- Load from reg address + reg address in R0
+            elsif std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) then
+
+            -- Load from reg address post-incremented
+            elsif std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) then
+
+            -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
+            elsif std_match(MOVB_atDispRm_TO_R0, InstructionReg) then
+
+            elsif std_match(MOVW_atDispRm_TO_R0, InstructionReg) then
+
+            elsif std_match(MOVL_atDispRm_TO_Rn, InstructionReg) then
+
+            -- Load from dis * (1,2,4) + GBR (into R0)
+            elsif std_match(MOV_B_R0_GBR, InstructionReg) then
+
+            elsif std_match(MOV_W_R0_GBR, InstructionReg) then
+
+            elsif std_match(MOV_L_R0_GBR, InstructionReg) then
 
             --  ==================================================================================================
             -- STORE
             --  ==================================================================================================
+
+            -- Store value in Rm to RAM address in Rn
+            elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
+
+            elsif std_match(MOVW_Rm_TO_atRn, InstructionReg) then
 
             elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
 
@@ -1095,6 +1138,34 @@ begin
 
                 -- Have DMAU take address directly from register
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+            
+            -- Store value in Rm to (RAM address in Rn + RAM address in R0)
+            elsif std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) then
+
+            elsif std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) then
+
+            elsif std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) then
+
+            -- Store value in Rm to (pre decremented RAM address in Rn)
+            elsif std_match(MOVB_Rm_TO_atPreDecRn, InstructionReg) then
+
+            elsif std_match(MOVW_Rm_TO_atPreDecRn, InstructionReg) then
+
+            elsif std_match(MOVL_Rm_TO_atPreDecRn, InstructionReg) then
+
+            -- Store value in Rm to ((RAM address in Rn) + (1,2,4)*disp)
+            elsif std_match(MOVB_R0_TO_atDispRn, InstructionReg) then
+
+            elsif std_match(MOVW_R0_TO_atDispRn, InstructionReg) then
+
+            elsif std_match(MOVL_Rm_TO_atDispRn, InstructionReg) then
+
+            -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR)
+            elsif std_match(MOV_B_GBR_R0, InstructionReg) then
+
+            elsif std_match(MOV_W_GBR_R0, InstructionReg) then
+
+            elsif std_match(MOV_L_GBR_R0, InstructionReg) then
 
             --  ==================================================================================================
             -- SYSTEM CONTROL
@@ -1450,6 +1521,14 @@ begin
             -- LOAD
             --  ==================================================================================================
 
+            -- Load immediate
+            elsif std_match(MOV_IMM_TO_Rn, InstructionReg) then
+
+            -- Load from reg address directly
+            elsif std_match(MOVB_atRm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVW_atRm_TO_Rn, InstructionReg) then
+
             elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
 
                 -- Store data bus data into Rn
@@ -1458,13 +1537,74 @@ begin
                 SH2RegStore <= REG_STORE;
                 
                 ReadFromMemoryL <= READ_FROM_MEMORY;
+            
+            -- Load from reg address + reg address in R0
+            elsif std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) then
+
+            -- Load from reg address post-incremented
+            elsif std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) then
+
+            elsif std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) then
+
+            -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
+            elsif std_match(MOVB_atDispRm_TO_R0, InstructionReg) then
+
+            elsif std_match(MOVW_atDispRm_TO_R0, InstructionReg) then
+
+            elsif std_match(MOVL_atDispRm_TO_Rn, InstructionReg) then
+
+            -- Load from dis * (1,2,4) + GBR (into R0)
+            elsif std_match(MOV_B_R0_GBR, InstructionReg) then
+
+            elsif std_match(MOV_W_R0_GBR, InstructionReg) then
+
+            elsif std_match(MOV_L_R0_GBR, InstructionReg) then
 
             --  ==================================================================================================
             -- STORE
             --  ==================================================================================================
 
+             -- Store value in Rm to RAM address in Rn
+            elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
+
+            elsif std_match(MOVW_Rm_TO_atRn, InstructionReg) then
+
             elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
                 WriteToMemoryL <= WRITE_TO_MEMORY;
+            
+            -- Store value in Rm to (RAM address in Rn + RAM address in R0)
+            elsif std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) then
+
+            elsif std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) then
+
+            elsif std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) then
+
+            -- Store value in Rm to (pre decremented RAM address in Rn)
+            elsif std_match(MOVB_Rm_TO_atPreDecRn, InstructionReg) then
+
+            elsif std_match(MOVW_Rm_TO_atPreDecRn, InstructionReg) then
+
+            elsif std_match(MOVL_Rm_TO_atPreDecRn, InstructionReg) then
+
+            -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*disp)
+            elsif std_match(MOVB_R0_TO_atDispRn, InstructionReg) then
+
+            elsif std_match(MOVW_R0_TO_atDispRn, InstructionReg) then
+
+            elsif std_match(MOVL_Rm_TO_atDispRn, InstructionReg) then
+
+            -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR)
+            elsif std_match(MOV_B_GBR_R0, InstructionReg) then
+
+            elsif std_match(MOV_W_GBR_R0, InstructionReg) then
+
+            elsif std_match(MOV_L_GBR_R0, InstructionReg) then
             
             end if;
 
