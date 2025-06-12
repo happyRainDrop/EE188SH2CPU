@@ -20,6 +20,7 @@
 --     29 Jan 21  Glen George       Fixed overflow signal in adder.
 --     11 Apr 25  Glen George       Removed Status Register.
 --     24 Apr 25  Ruth Berkun       Copied over from generic ALU.vhd
+--     11 Jun 25  Nerissa Finnen    Added immediate functionality to Op A
 ----------------------------------------------------------------------------
 
 library ieee;
@@ -48,7 +49,9 @@ entity  SH2ALU  is
         SH2ALUOpA   : in      std_logic_vector(regLen - 1 downto 0);   -- first operand (hooked up to reg bus)
         SH2ALUOpB   : in      std_logic_vector(regLen - 1 downto 0);   -- second operand, option 1 (hooked up to reg bus)
         SH2ALUImmediateOperand : in     std_logic_vector(regLen - 1 downto 0); -- other possible second operand (immediate)
+        SH2ALUOpAImmediate : in  std_logic_vector(regLen - 1 downto 0); --other operand for Op A
         SH2ALUUseImmediateOperand : in std_logic;                        -- 1 to use immediate 0 to used ALUOpB
+        SH2ALUOpAUseImmediateOperand : in std_logic;                     -- 1 to use immediate 0 to used ALUOpA
         SH2Cin      : in      std_logic;                                 -- carry in
         SH2FCmd     : in      std_logic_vector(3 downto 0);              -- F-Block operation
         SH2CinCmd   : in      std_logic_vector(1 downto 0);              -- carry in operation
@@ -86,11 +89,15 @@ architecture  behavioral  of  SH2ALU  is
 
     signal ALUOpB_input : std_logic_vector(regLen - 1 downto 0); -- second operand can either be from immediate or reg
 
+    signal ALUOpA_input : std_logic_vector(regLen - 1 downto 0); -- first operand can be an immediate or reg
+
 begin
 
 
     -- ALU: Prepare inputs
     ALUOpB_input <= SH2ALUOpB when SH2ALUUseImmediateOperand = '0' else SH2ALUImmediateOperand;
+
+    ALUOpA_input <= SH2ALUOpA when SH2ALUOpAUseImmediateOperand = '0' else SH2ALUOpAImmediate;
     
     -- Hook up ALU inputs and output    
     SH2ALUInstance : ALU
