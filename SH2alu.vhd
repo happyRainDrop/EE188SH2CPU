@@ -44,6 +44,7 @@ use work.SH2ALUConstants.all;
 library ieee;
 use ieee.std_logic_1164.all;
 
+
 entity  SH2ALU  is
     port(
         SH2ALUOpA   : in      std_logic_vector(regLen - 1 downto 0);   -- first operand (hooked up to reg bus)

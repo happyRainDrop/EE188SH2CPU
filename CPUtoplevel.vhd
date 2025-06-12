@@ -868,6 +868,8 @@ begin
                 
             elsif std_match(InstructionReg, EXTS_W_Rm_Rn) then  
 
+
+            
             elsif std_match(InstructionReg, EXTU_B_Rm_Rn) then  
                 SH2ALUOpAImmediate              <= BYTE_MASK;
                 SH2ALUOpAUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value
