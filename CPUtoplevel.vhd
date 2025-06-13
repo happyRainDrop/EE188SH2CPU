@@ -1204,6 +1204,7 @@ begin
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
 
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
 
             elsif std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) then
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
@@ -1214,6 +1215,8 @@ begin
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
 
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
             elsif std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) then
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
@@ -1222,6 +1225,8 @@ begin
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
 
             -- Load from reg address post-incremented
             elsif std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) then
@@ -1233,6 +1238,8 @@ begin
                 SH2DMAUIncDecSel <= MAU_INC_SEL;
                 SH2DMAUPrePostSel <= MAU_POST_SEL;
 
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
             elsif std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) then
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
@@ -1242,6 +1249,8 @@ begin
                 SH2DMAUIncDecSel <= MAU_INC_SEL;
                 SH2DMAUPrePostSel <= MAU_POST_SEL;
 
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
             elsif std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) then
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
@@ -1250,6 +1259,8 @@ begin
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 SH2DMAUIncDecSel <= MAU_INC_SEL;
                 SH2DMAUPrePostSel <= MAU_POST_SEL;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
 
             -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
             elsif std_match(MOVB_atDispRm_TO_R0, InstructionReg) then
@@ -1262,6 +1273,8 @@ begin
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
 
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
             elsif std_match(MOVW_atDispRm_TO_R0, InstructionReg) then
 
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
@@ -1271,6 +1284,8 @@ begin
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
 
             elsif std_match(MOVL_atDispRm_TO_Rn, InstructionReg) then
 
@@ -1282,6 +1297,8 @@ begin
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
 
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
             -- Load from dis * (1,2,4) + GBR (into R0)
             --------------------------------------------------------------------------- TODO: Pop GBR out as its own reg
             elsif std_match(MOV_B_R0_GBR, InstructionReg) then
@@ -1291,17 +1308,23 @@ begin
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
 
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
             elsif std_match(MOV_W_R0_GBR, InstructionReg) then
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
 
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
             elsif std_match(MOV_L_R0_GBR, InstructionReg) then
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
 
             --  ==================================================================================================
             -- STORE
