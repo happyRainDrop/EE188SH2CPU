@@ -40,694 +40,700 @@
 --                                  Made intermediate variables for MOV reg outputs.
 --     11 June 25 Ruth Berkun       Update addressbus to reflect 4*PC value (Each longword is 4 apart in memory address now) 
 --     11 June 25 Nerissa Finnen    Updated all Shift commands to new style
+--     11-12 June 25 Nerisa Finnen  Implemented all one-clock ALU instructions, starting the System Control 
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
-library ieee;
-use ieee.std_logic_1164.ALL;
-package SH2_CPU_Constants is
+LIBRARY ieee;
+USE ieee.std_logic_1164.ALL;
+PACKAGE SH2_CPU_Constants IS
 
     -- Memory instantiation
-    constant memBlockWordSize : integer := 256;  -- memBlockWordSize words in every memory block
-    constant instrLen : integer := 16;
+    CONSTANT memBlockWordSize : INTEGER := 256; -- memBlockWordSize words in every memory block
+    CONSTANT instrLen : INTEGER := 16;
 
     -- Register and word size configuration
-    constant regLen       : integer := 32;   -- Each register is 32 bits
-    constant regCount     : integer := 18;   -- 16 general + 2 special registers (PR, SR)
+    CONSTANT regLen : INTEGER := 32; -- Each register is 32 bits
+    CONSTANT regCount : INTEGER := 18; -- 16 general + 2 special registers (PR, SR)
 
     -- DMAU configuration
-    constant dmauSourceCount  : integer := 4;    -- from reg array, GBR, VBR, or immediate
-    constant dmauOffsetCount  : integer := 7;    -- 0, R0x1, R0x2, R0x4, Immx1, Immx2, Immx4
-    constant maxIncDecBitDMAU     : integer := 3;    -- Allow inc/dec up to bit 3 (+-4) 
+    CONSTANT dmauSourceCount : INTEGER := 4; -- from reg array, GBR, VBR, or immediate
+    CONSTANT dmauOffsetCount : INTEGER := 7; -- 0, R0x1, R0x2, R0x4, Immx1, Immx2, Immx4
+    CONSTANT maxIncDecBitDMAU : INTEGER := 3; -- Allow inc/dec up to bit 3 (+-4) 
 
-        -- DMAU source select
-    constant DMAU_SRC_SEL_GBR : integer := 0;
-    constant DMAU_SRC_SEL_VBR : integer := 1;
-    constant DMAU_SRC_SEL_REG : integer := 2;
-    constant DMAU_SRC_SEL_IMM : integer := 3;
+    -- DMAU source select
+    CONSTANT DMAU_SRC_SEL_GBR : INTEGER := 0;
+    CONSTANT DMAU_SRC_SEL_VBR : INTEGER := 1;
+    CONSTANT DMAU_SRC_SEL_REG : INTEGER := 2;
+    CONSTANT DMAU_SRC_SEL_IMM : INTEGER := 3;
 
     -- DMAU offset select
-    constant DMAU_OFFSET_SEL_ZEROES : integer := 0;
-    constant DMAU_OFFSET_SEL_REG_OFFSET_x1 : integer := 1;
-    constant DMAU_OFFSET_SEL_REG_OFFSET_x2 : integer := 2;
-    constant DMAU_OFFSET_SEL_REG_OFFSET_x4 : integer := 3;
-    constant DMAU_OFFSET_SEL_IMM_OFFSET_x1 : integer := 4;
-    constant DMAU_OFFSET_SEL_IMM_OFFSET_x2 : integer := 5;
-    constant DMAU_OFFSET_SEL_IMM_OFFSET_x4 : integer := 6;
+    CONSTANT DMAU_OFFSET_SEL_ZEROES : INTEGER := 0;
+    CONSTANT DMAU_OFFSET_SEL_REG_OFFSET_x1 : INTEGER := 1;
+    CONSTANT DMAU_OFFSET_SEL_REG_OFFSET_x2 : INTEGER := 2;
+    CONSTANT DMAU_OFFSET_SEL_REG_OFFSET_x4 : INTEGER := 3;
+    CONSTANT DMAU_OFFSET_SEL_IMM_OFFSET_x1 : INTEGER := 4;
+    CONSTANT DMAU_OFFSET_SEL_IMM_OFFSET_x2 : INTEGER := 5;
+    CONSTANT DMAU_OFFSET_SEL_IMM_OFFSET_x4 : INTEGER := 6;
 
     -- DMAU and PMAU inc/dec select
-    constant MAU_INC_SEL : std_logic := '0';
-    constant MAU_DEC_SEL : std_logic := '1';
-    constant MAU_PRE_SEL : std_logic := '0';
-    constant MAU_POST_SEL : std_logic := '1';
+    CONSTANT MAU_INC_SEL : STD_LOGIC := '0';
+    CONSTANT MAU_DEC_SEL : STD_LOGIC := '1';
+    CONSTANT MAU_PRE_SEL : STD_LOGIC := '0';
+    CONSTANT MAU_POST_SEL : STD_LOGIC := '1';
 
     -- PMAU configuration
-    constant pmauSourceCount  : integer := 3;    -- from reg array, PC, or immediate
-    constant pmauOffsetCount  : integer := 7;    -- 0, R0x1, R0x2, R0x4, Immx1, Immx2, Immx4
-    constant maxIncDecBitPMAU     : integer := 3;    -- Allow inc/dec up to bit 3 (+-4)
+    CONSTANT pmauSourceCount : INTEGER := 3; -- from reg array, PC, or immediate
+    CONSTANT pmauOffsetCount : INTEGER := 7; -- 0, R0x1, R0x2, R0x4, Immx1, Immx2, Immx4
+    CONSTANT maxIncDecBitPMAU : INTEGER := 3; -- Allow inc/dec up to bit 3 (+-4)
 
     -- PMAU source select
-    constant PMAU_SRC_SEL_PC : integer := 0;
-    constant PMAU_SRC_SEL_REG : integer := 1;
-    constant PMAU_SRC_SEL_IMM : integer := 2;
+    CONSTANT PMAU_SRC_SEL_PC : INTEGER := 0;
+    CONSTANT PMAU_SRC_SEL_REG : INTEGER := 1;
+    CONSTANT PMAU_SRC_SEL_IMM : INTEGER := 2;
 
     -- PMAU offset select
-    constant PMAU_OFFSET_SEL_ZEROES : integer := 0;
-    constant PMAU_OFFSET_SEL_REG_OFFSET_x1 : integer := 1;
-    constant PMAU_OFFSET_SEL_REG_OFFSET_x2 : integer := 2;
-    constant PMAU_OFFSET_SEL_REG_OFFSET_x4 : integer := 3;
-    constant PMAU_OFFSET_SEL_IMM_OFFSET_x1 : integer := 4;
-    constant PMAU_OFFSET_SEL_IMM_OFFSET_x2 : integer := 5;
-    constant PMAU_OFFSET_SEL_IMM_OFFSET_x4 : integer := 6;
+    CONSTANT PMAU_OFFSET_SEL_ZEROES : INTEGER := 0;
+    CONSTANT PMAU_OFFSET_SEL_REG_OFFSET_x1 : INTEGER := 1;
+    CONSTANT PMAU_OFFSET_SEL_REG_OFFSET_x2 : INTEGER := 2;
+    CONSTANT PMAU_OFFSET_SEL_REG_OFFSET_x4 : INTEGER := 3;
+    CONSTANT PMAU_OFFSET_SEL_IMM_OFFSET_x1 : INTEGER := 4;
+    CONSTANT PMAU_OFFSET_SEL_IMM_OFFSET_x2 : INTEGER := 5;
+    CONSTANT PMAU_OFFSET_SEL_IMM_OFFSET_x4 : INTEGER := 6;
 
     -- Flag bit positions (useful for flag bus indexing)
-    constant FLAG_INDEX_CARRYOUT     : integer := 4;
-    constant FLAG_INDEX_HALF_CARRY   : integer := 3;
-    constant FLAG_INDEX_OVERFLOW     : integer := 2;
-    constant FLAG_INDEX_ZERO         : integer := 1;
-    constant FLAG_INDEX_SIGN         : integer := 0;
+    CONSTANT FLAG_INDEX_CARRYOUT : INTEGER := 4;
+    CONSTANT FLAG_INDEX_HALF_CARRY : INTEGER := 3;
+    CONSTANT FLAG_INDEX_OVERFLOW : INTEGER := 2;
+    CONSTANT FLAG_INDEX_ZERO : INTEGER := 1;
+    CONSTANT FLAG_INDEX_SIGN : INTEGER := 0;
 
     -- Special register indices
-    constant REG_PR            : integer := 16;
-    constant REG_SR            : integer := 17;
+    CONSTANT REG_PR : INTEGER := 16;
+    CONSTANT REG_SR : INTEGER := 17;
 
     -- Choosing data and address bus indicies
-    constant NUM_DATA_BUS_OPTIONS : integer := 3; -- ALU, regs, hold, open
-    constant NUM_ADDRESS_BUS_OPTIONS : integer := 4; -- DMAU, PMAU, regs, hold, open
-    constant OPEN_DATA_BUS : integer := 0;
-    constant HOLD_DATA_BUS : integer := 1;
-    constant SET_DATA_BUS_TO_REG_A_OUT : integer := 2;
-    constant SET_DATA_BUS_TO_ALU_OUT : integer := 3;
-    constant OPEN_ADDRESS_BUS : integer := 0;
-    constant HOLD_ADDRESS_BUS : integer := 1;
-    constant SET_ADDRESS_BUS_TO_PMAU_OUT : integer := 2;
-    constant SET_ADDRESS_BUS_TO_DMAU_OUT : integer := 3;
-    constant SET_ADDRESS_BUS_TO_REG_A2_OUT : integer := 4;
+    CONSTANT NUM_DATA_BUS_OPTIONS : INTEGER := 3; -- ALU, regs, hold, open
+    CONSTANT NUM_ADDRESS_BUS_OPTIONS : INTEGER := 4; -- DMAU, PMAU, regs, hold, open
+    CONSTANT OPEN_DATA_BUS : INTEGER := 0;
+    CONSTANT HOLD_DATA_BUS : INTEGER := 1;
+    CONSTANT SET_DATA_BUS_TO_REG_A_OUT : INTEGER := 2;
+    CONSTANT SET_DATA_BUS_TO_ALU_OUT : INTEGER := 3;
+    CONSTANT OPEN_ADDRESS_BUS : INTEGER := 0;
+    CONSTANT HOLD_ADDRESS_BUS : INTEGER := 1;
+    CONSTANT SET_ADDRESS_BUS_TO_PMAU_OUT : INTEGER := 2;
+    CONSTANT SET_ADDRESS_BUS_TO_DMAU_OUT : INTEGER := 3;
+    CONSTANT SET_ADDRESS_BUS_TO_REG_A2_OUT : INTEGER := 4;
 
     -- Holding settings for DMAU and PMAU; ensures that the register 
     -- is held at current value by decrementing by 1 and adding 1 as offset
-    constant PMAU_HOLD         : std_logic := '0';     --Holds the PC value in the PMAU
-    constant PMAU_NO_HOLD         : std_logic := '1';     --Does not hold the PC value in the PMAU
-    constant DEFAULT_SRC_SEL    : integer := 0;         --May change due to PC/GBR location moving
-    constant DEFAULT_DEC_SEL    : std_logic := MAU_DEC_SEL;     --Select decrement
-    constant DEFAULT_BIT    : integer := 0;         --Only 0th bit to modify
-    constant DEFAULT_POST_SEL   : std_logic := MAU_POST_SEL;     --Post decrement and preserve the initial value
-    constant DEFAULT_OFFSET_SEL : integer := 4;         --Select immediate offset multiplied by 1
-    constant DEFAULT_OFFSET_VAL : std_logic_vector(31 downto 0) := "00000000000000000000000000000001";    --Set the offset to be 1
+    CONSTANT PMAU_HOLD : STD_LOGIC := '0'; --Holds the PC value in the PMAU
+    CONSTANT PMAU_NO_HOLD : STD_LOGIC := '1'; --Does not hold the PC value in the PMAU
+    CONSTANT DEFAULT_SRC_SEL : INTEGER := 0; --May change due to PC/GBR location moving
+    CONSTANT DEFAULT_DEC_SEL : STD_LOGIC := MAU_DEC_SEL; --Select decrement
+    CONSTANT DEFAULT_BIT : INTEGER := 0; --Only 0th bit to modify
+    CONSTANT DEFAULT_POST_SEL : STD_LOGIC := MAU_POST_SEL; --Post decrement and preserve the initial value
+    CONSTANT DEFAULT_OFFSET_SEL : INTEGER := 4; --Select immediate offset multiplied by 1
+    CONSTANT DEFAULT_OFFSET_VAL : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000000000001"; --Set the offset to be 1
 
     -- Incrementing in PMAU
-    constant DEFAULT_PRE_SEL    : std_logic := '1';
-    constant DEFAULT_INC_SEL    : std_logic := '0';
-    constant DEFAULT_NO_OFF_VAL : integer := 0;
+    CONSTANT DEFAULT_PRE_SEL : STD_LOGIC := '1';
+    CONSTANT DEFAULT_INC_SEL : STD_LOGIC := '0';
+    CONSTANT DEFAULT_NO_OFF_VAL : INTEGER := 0;
 
     -- Incrementing in DMAU
 
     -- PC clock increments
-    constant ONE_CLOCK      : std_logic_vector(31 downto 0) := "00000000000000000000000000000001";
-    constant TWO_CLOCK      : std_logic_vector(31 downto 0) := "00000000000000000000000000000010";
-    constant THREE_CLOCK    : std_logic_vector(31 downto 0) := "00000000000000000000000000000011";
-    constant FOUR_CLOCK     : std_logic_vector(31 downto 0) := "00000000000000000000000000000100";
+    CONSTANT ONE_CLOCK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000000000001";
+    CONSTANT TWO_CLOCK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000000000010";
+    CONSTANT THREE_CLOCK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000000000011";
+    CONSTANT FOUR_CLOCK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000000000100";
 
     --ALU commands
     --Will fill in more these are gonna take a long time ngl
-    constant ALU_USE_IMM    : std_logic := '1';
-    constant ALU_NO_IMM     : std_logic := '0';
+    CONSTANT ALU_USE_IMM : STD_LOGIC := '1';
+    CONSTANT ALU_NO_IMM : STD_LOGIC := '0';
     --Unsure if these two ^ are right
-    constant ALU_CIN        : std_logic := '1';
-    constant ALU_NO_CIN     : std_logic := '0';
-    constant ALU_FB_SEL     : std_logic_vector(1 downto 0) := "00";
-    constant ALU_SHIFT_SEL  : std_logic_vector(1 downto 0) := "10";
-    constant ALU_ADDER_SEL  : std_logic_vector(1 downto 0) := "01";
+    CONSTANT ALU_CIN : STD_LOGIC := '1';
+    CONSTANT ALU_NO_CIN : STD_LOGIC := '0';
+    CONSTANT ALU_FB_SEL : STD_LOGIC_VECTOR(1 DOWNTO 0) := "00";
+    CONSTANT ALU_SHIFT_SEL : STD_LOGIC_VECTOR(1 DOWNTO 0) := "10";
+    CONSTANT ALU_ADDER_SEL : STD_LOGIC_VECTOR(1 DOWNTO 0) := "01";
 
-    constant ALU_ZERO_IMM   : std_logic_vector(regLen - 1 downto 0) := "00000000000000000000000000000000";
+    CONSTANT ALU_ZERO_IMM : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := "00000000000000000000000000000000";
 
     --Reg array default values
-    constant REG_ZEROTH_SEL : integer := 0;
-    constant REG_STORE      : std_logic := '1';
-    constant REG_NO_STORE   : std_logic := '0';
-    constant STATUS_REG_INDEX   : integer := 17;
+    CONSTANT REG_ZEROTH_SEL : INTEGER := 0;
+    CONSTANT REG_STORE : STD_LOGIC := '1';
+    CONSTANT REG_NO_STORE : STD_LOGIC := '0';
+    CONSTANT STATUS_REG_INDEX : INTEGER := 17;
 
     -- ALU default values (not too important; 
     --                     ALU can do whatever it wants so long as it doesn't update address or data bus)
-    constant DEFAULT_ALU_CIN : std_logic := '0';     --No Cin
-    constant DEFAULT_ALU_F_CMD : std_logic_vector(3 downto 0) := "1010";  --Use OpB for the Adder
-    constant DEFAULT_ALU_CIN_CMD : std_logic_vector(1 downto 0) := "00";    --No Cin
-    constant DEFAULT_ALU_S_CMD : std_logic_vector(2 downto 0) := "000";   --Doesn't matter the shift (output is not selected from ALU)
-    constant DEFAUL_ALU_CMD : std_logic_vector(1 downto 0) := "00";    
-    constant DEFAULT_ALU_IMM_OP : std_logic_vector(31 downto 0)  := (others => '0');   --All 0s
-    constant DEFAULT_ALU_USE_IMM : std_logic := '0';     --By default, don't use the immediate value
+    CONSTANT DEFAULT_ALU_CIN : STD_LOGIC := '0'; --No Cin
+    CONSTANT DEFAULT_ALU_F_CMD : STD_LOGIC_VECTOR(3 DOWNTO 0) := "1010"; --Use OpB for the Adder
+    CONSTANT DEFAULT_ALU_CIN_CMD : STD_LOGIC_VECTOR(1 DOWNTO 0) := "00"; --No Cin
+    CONSTANT DEFAULT_ALU_S_CMD : STD_LOGIC_VECTOR(2 DOWNTO 0) := "000"; --Doesn't matter the shift (output is not selected from ALU)
+    CONSTANT DEFAUL_ALU_CMD : STD_LOGIC_VECTOR(1 DOWNTO 0) := "00";
+    CONSTANT DEFAULT_ALU_IMM_OP : STD_LOGIC_VECTOR(31 DOWNTO 0) := (OTHERS => '0'); --All 0s
+    CONSTANT DEFAULT_ALU_USE_IMM : STD_LOGIC := '0'; --By default, don't use the immediate value
 
     -- Misc constants
-    constant REG_LEN_ZEROES : std_logic_vector(31 downto 0) := (others => '0');
-    constant INSTR_LEN_ZEROES : std_logic_vector(15 downto 0) := (others => '0');
-    constant WRITE_TO_MEMORY : std_logic := '1';
-    constant NO_WRITE_TO_MEMORY : std_logic := '0';
-    constant READ_FROM_MEMORY : std_logic := '1';
-    constant NO_READ_FROM_MEMORY : std_logic := '0';
-    constant WORD_MASK  : std_logic_vector(31 downto 0) := "00000000000000000000000011111111";
-    constant BYTE_MASK  : std_logic_vector(31 downto 0) := "00000000000000001111111111111111";
-   
+    CONSTANT REG_LEN_ZEROES : STD_LOGIC_VECTOR(31 DOWNTO 0) := (OTHERS => '0');
+    CONSTANT INSTR_LEN_ZEROES : STD_LOGIC_VECTOR(15 DOWNTO 0) := (OTHERS => '0');
+    CONSTANT WRITE_TO_MEMORY : STD_LOGIC := '1';
+    CONSTANT NO_WRITE_TO_MEMORY : STD_LOGIC := '0';
+    CONSTANT READ_FROM_MEMORY : STD_LOGIC := '1';
+    CONSTANT NO_READ_FROM_MEMORY : STD_LOGIC := '0';
+    CONSTANT WORD_MASK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000011111111";
+    CONSTANT BYTE_MASK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000001111111111111111";
+END SH2_CPU_Constants;
 
-end SH2_CPU_Constants;
-
-library ieee;
-use ieee.std_logic_1164.ALL;
-package SH2_IR_Constants is
+LIBRARY ieee;
+USE ieee.std_logic_1164.ALL;
+PACKAGE SH2_IR_Constants IS
     -- SH-2 Instruction Opcode Constants
     -- Register, immediate, and specified registers
-    constant ADD_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1100";
-    constant ADD_imm_Rn : std_logic_vector(15 downto 0) := "0111------------";
-    constant ADDC_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1110";
-    constant ADDV_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1111";
-    constant AND_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1001";
-    constant AND_imm_R0 : std_logic_vector(15 downto 0) := "11001001--------";
-    constant AND_B_imm_GBR : std_logic_vector(15 downto 0) := "11001101--------";
-    constant BF_disp : std_logic_vector(15 downto 0) := "10001011--------";
-    constant BF_S_disp : std_logic_vector(15 downto 0) := "10001111--------";
-    constant BRA_disp : std_logic_vector(15 downto 0) := "1010------------";
-    constant BRAF_Rm : std_logic_vector(15 downto 0) := "0000----00100011";
-    constant BSR_disp : std_logic_vector(15 downto 0) := "1011------------";
-    constant BSRF_Rm : std_logic_vector(15 downto 0) := "0000----00000011";
-    constant BT_disp : std_logic_vector(15 downto 0) := "10001001--------";
-    constant BT_S_disp : std_logic_vector(15 downto 0) := "10001101--------";
+    CONSTANT ADD_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------1100";
+    CONSTANT ADD_imm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0111------------";
+    CONSTANT ADDC_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------1110";
+    CONSTANT ADDV_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------1111";
+    CONSTANT AND_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1001";
+    CONSTANT AND_imm_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001001--------";
+    CONSTANT AND_B_imm_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001101--------";
+    CONSTANT BF_disp : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10001011--------";
+    CONSTANT BF_S_disp : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10001111--------";
+    CONSTANT BRA_disp : STD_LOGIC_VECTOR(15 DOWNTO 0) := "1010------------";
+    CONSTANT BRAF_Rm : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000----00100011";
+    CONSTANT BSR_disp : STD_LOGIC_VECTOR(15 DOWNTO 0) := "1011------------";
+    CONSTANT BSRF_Rm : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000----00000011";
+    CONSTANT BT_disp : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10001001--------";
+    CONSTANT BT_S_disp : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10001101--------";
     --constant CLRMAC : std_logic_vector(15 downto 0) := "0000000000101000";
-    constant CLRT : std_logic_vector(15 downto 0) := "0000000000001000";
-    constant CMP_EQ_imm_R0 : std_logic_vector(15 downto 0) := "10001000--------";
-    constant CMP_EQ_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------0000";
-    constant CMP_GE_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------0011";
-    constant CMP_GT_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------0111";
-    constant CMP_HI_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------0110";
-    constant CMP_HS_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------0010";
-    constant CMP_PL_Rn : std_logic_vector(15 downto 0) := "0100----00010101";
-    constant CMP_PZ_Rn : std_logic_vector(15 downto 0) := "0100----00010001";
-    constant CMP_STR_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1100";
+    CONSTANT CLRT : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000000000001000";
+    CONSTANT CMP_EQ_imm_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10001000--------";
+    CONSTANT CMP_EQ_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------0000";
+    CONSTANT CMP_GE_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------0011";
+    CONSTANT CMP_GT_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------0111";
+    CONSTANT CMP_HI_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------0110";
+    CONSTANT CMP_HS_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------0010";
+    CONSTANT CMP_PL_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00010101";
+    CONSTANT CMP_PZ_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00010001";
+    CONSTANT CMP_STR_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1100";
     --constant DIV0S_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------0111";
     --constant DIV0U : std_logic_vector(15 downto 0) := "0000000000011001";
     --constant DIV1_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------0100";
     --constant DMULS_L_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1101";
     --constant DMULU_L_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------0101";
-    constant DT_Rn : std_logic_vector(15 downto 0) := "0100----00010000";
-    constant EXTS_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1110";
-    constant EXTS_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1111";
-    constant EXTU_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1100";
-    constant EXTU_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1101";
-    constant JMP_Rm : std_logic_vector(15 downto 0) := "0100----00101011";
-    constant JSR_Rm : std_logic_vector(15 downto 0) := "0100----00001011";
-    constant LDC_Rm_SR : std_logic_vector(15 downto 0) := "0100----00001110";
-    constant LDC_Rm_GBR : std_logic_vector(15 downto 0) := "0100----00011110";
-    constant LDC_Rm_VBR : std_logic_vector(15 downto 0) := "0100----00101110";
-    constant LDC_L_Rm_SR : std_logic_vector(15 downto 0) := "0100----00000111";
-    constant LDC_L_Rm_GBR : std_logic_vector(15 downto 0) := "0100----00010111";
-    constant LDC_L_Rm_VBR : std_logic_vector(15 downto 0) := "0100----00100111";
+    CONSTANT DT_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00010000";
+    CONSTANT EXTS_B_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1110";
+    CONSTANT EXTS_W_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1111";
+    CONSTANT EXTU_B_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1100";
+    CONSTANT EXTU_W_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1101";
+    CONSTANT JMP_Rm : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00101011";
+    CONSTANT JSR_Rm : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00001011";
+    CONSTANT LDC_Rm_SR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00001110";
+    CONSTANT LDC_Rm_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00011110";
+    CONSTANT LDC_Rm_VBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00101110";
+    CONSTANT LDC_L_Rm_SR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00000111";
+    CONSTANT LDC_L_Rm_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00010111";
+    CONSTANT LDC_L_Rm_VBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00100111";
     --constant LDS_Rm_MACH : std_logic_vector(15 downto 0) := "0100----00001010";
     --constant LDS_Rm_MACL : std_logic_vector(15 downto 0) := "0100----00011010";
-    constant LDS_Rm_PR : std_logic_vector(15 downto 0) := "0100----00101010";
+    CONSTANT LDS_Rm_PR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00101010";
     --constant LDS_L_Rm_MACH : std_logic_vector(15 downto 0) := "0100----00000110";
     --constant LDS_L_Rm_MACL : std_logic_vector(15 downto 0) := "0100----00010110";
-    constant LDS_L_Rm_PR : std_logic_vector(15 downto 0) := "0100----00100110";
+    CONSTANT LDS_L_Rm_PR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00100110";
     --constant MAC_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000--------1111";
     --constant MAC_W_Rm_Rn : std_logic_vector(15 downto 0) := "0100--------1111";
-    constant MOV_IMM_TO_Rn        : std_logic_vector(15 downto 0) := "1110------------"; -- MOV #imm, Rn
-    constant MOV_W_PC_DISP_TO_Rn  : std_logic_vector(15 downto 0) := "1001------------"; -- MOV.W @(disp,PC), Rn
-    constant MOV_L_PC_DISP_TO_Rn  : std_logic_vector(15 downto 0) := "1101------------"; -- MOV.L @(disp,PC), Rn
-    constant MOV_Rm_TO_Rn         : std_logic_vector(15 downto 0) := "0110--------0011"; -- MOV Rm, Rn
-    constant MOVB_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010--------0000"; -- MOV.B Rm, @Rn
-    constant MOVW_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010--------0001"; -- MOV.W Rm, @Rn
-    constant MOVL_Rm_TO_atRn      : std_logic_vector(15 downto 0) := "0010--------0010"; -- MOV.L Rm, @Rn
-    constant MOVB_atRm_TO_Rn      : std_logic_vector(15 downto 0) := "0110--------0000"; -- MOV.B @Rm, Rn
-    constant MOVW_atRm_TO_Rn      : std_logic_vector(15 downto 0) := "0110--------0001"; -- MOV.W @Rm, Rn
-    constant MOVL_atRm_TO_Rn      : std_logic_vector(15 downto 0) := "0110--------0010"; -- MOV.L @Rm, Rn
-    constant MOVB_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010--------0100"; -- MOV.B Rm, @–Rn
-    constant MOVW_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010--------0101"; -- MOV.W Rm, @–Rn
-    constant MOVL_Rm_TO_atPreDecRn : std_logic_vector(15 downto 0) := "0010--------0110"; -- MOV.L Rm, @–Rn
-    constant MOVB_atPostIncRm_TO_Rn : std_logic_vector(15 downto 0) := "0110--------0100"; -- MOV.B @Rm+, Rn
-    constant MOVW_atPostIncRm_TO_Rn : std_logic_vector(15 downto 0) := "0110--------0101"; -- MOV.W @Rm+, Rn
-    constant MOVL_atPostIncRm_TO_Rn : std_logic_vector(15 downto 0) := "0110--------0110"; -- MOV.L @Rm+, Rn
-    constant MOVB_R0_TO_atDispRn  : std_logic_vector(15 downto 0) := "10000000--------"; -- MOV.B R0, @(disp,Rn)
-    constant MOVW_R0_TO_atDispRn  : std_logic_vector(15 downto 0) := "10000001--------"; -- MOV.W R0, @(disp,Rn)
-    constant MOVL_Rm_TO_atDispRn  : std_logic_vector(15 downto 0) := "0001------------"; -- MOV.L Rm, @(disp,Rn)
-    constant MOVB_atDispRm_TO_R0  : std_logic_vector(15 downto 0) := "10000100--------"; -- MOV.B @(disp,Rm), R0
-    constant MOVW_atDispRm_TO_R0  : std_logic_vector(15 downto 0) := "10000101--------"; -- MOV.W @(disp,Rm), R0
-    constant MOVL_atDispRm_TO_Rn  : std_logic_vector(15 downto 0) := "0101------------"; -- MOV.L @(disp,Rm), Rn
-    constant MOVB_Rm_TO_atR0Rn    : std_logic_vector(15 downto 0) := "0000--------0100"; -- MOV.B Rm, @(R0,Rn)
-    constant MOVW_Rm_TO_atR0Rn    : std_logic_vector(15 downto 0) := "0000--------0101"; -- MOV.W Rm, @(R0,Rn)  
-    constant MOV_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000--------0110";
-    constant MOV_B_GBR_R0 : std_logic_vector(15 downto 0) := "11000000--------";
-    constant MOV_W_GBR_R0 : std_logic_vector(15 downto 0) := "11000001--------";
-    constant MOV_L_GBR_R0 : std_logic_vector(15 downto 0) := "11000010--------";
-    constant MOV_B_R0_GBR : std_logic_vector(15 downto 0) := "11000100--------";
-    constant MOV_W_R0_GBR : std_logic_vector(15 downto 0) := "11000101--------";
-    constant MOV_L_R0_GBR : std_logic_vector(15 downto 0) := "11000110--------";
-    constant MOVA_PC_R0 : std_logic_vector(15 downto 0) := "11000111--------";
-    constant MOVT_Rn : std_logic_vector(15 downto 0) := "0000----00101001";
+    CONSTANT MOV_IMM_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "1110------------"; -- MOV #imm, Rn
+    CONSTANT MOV_W_PC_DISP_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "1001------------"; -- MOV.W @(disp,PC), Rn
+    CONSTANT MOV_L_PC_DISP_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "1101------------"; -- MOV.L @(disp,PC), Rn
+    CONSTANT MOV_Rm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0011"; -- MOV Rm, Rn
+    CONSTANT MOVB_Rm_TO_atRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0000"; -- MOV.B Rm, @Rn
+    CONSTANT MOVW_Rm_TO_atRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0001"; -- MOV.W Rm, @Rn
+    CONSTANT MOVL_Rm_TO_atRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0010"; -- MOV.L Rm, @Rn
+    CONSTANT MOVB_atRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0000"; -- MOV.B @Rm, Rn
+    CONSTANT MOVW_atRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0001"; -- MOV.W @Rm, Rn
+    CONSTANT MOVL_atRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0010"; -- MOV.L @Rm, Rn
+    CONSTANT MOVB_Rm_TO_atPreDecRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0100"; -- MOV.B Rm, @–Rn
+    CONSTANT MOVW_Rm_TO_atPreDecRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0101"; -- MOV.W Rm, @–Rn
+    CONSTANT MOVL_Rm_TO_atPreDecRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0110"; -- MOV.L Rm, @–Rn
+    CONSTANT MOVB_atPostIncRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0100"; -- MOV.B @Rm+, Rn
+    CONSTANT MOVW_atPostIncRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0101"; -- MOV.W @Rm+, Rn
+    CONSTANT MOVL_atPostIncRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0110"; -- MOV.L @Rm+, Rn
+    CONSTANT MOVB_R0_TO_atDispRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000000--------"; -- MOV.B R0, @(disp,Rn)
+    CONSTANT MOVW_R0_TO_atDispRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000001--------"; -- MOV.W R0, @(disp,Rn)
+    CONSTANT MOVL_Rm_TO_atDispRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0001------------"; -- MOV.L Rm, @(disp,Rn)
+    CONSTANT MOVB_atDispRm_TO_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000100--------"; -- MOV.B @(disp,Rm), R0
+    CONSTANT MOVW_atDispRm_TO_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000101--------"; -- MOV.W @(disp,Rm), R0
+    CONSTANT MOVL_atDispRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0101------------"; -- MOV.L @(disp,Rm), Rn
+    CONSTANT MOVB_Rm_TO_atR0Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------0100"; -- MOV.B Rm, @(R0,Rn)
+    CONSTANT MOVW_Rm_TO_atR0Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------0101"; -- MOV.W Rm, @(R0,Rn)  
+    CONSTANT MOV_L_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------0110";
+    CONSTANT MOV_B_GBR_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000000--------";
+    CONSTANT MOV_W_GBR_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000001--------";
+    CONSTANT MOV_L_GBR_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000010--------";
+    CONSTANT MOV_B_R0_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000100--------";
+    CONSTANT MOV_W_R0_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000101--------";
+    CONSTANT MOV_L_R0_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000110--------";
+    CONSTANT MOVA_PC_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000111--------";
+    CONSTANT MOVT_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000----00101001";
     --constant MUL_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000--------0111";
     --constant MULS_W_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1111";
     --constant MULU_W_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1110";
-    constant NEG_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1011";
-    constant NEGC_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1010";
-    constant NOP : std_logic_vector(15 downto 0) := "0000000000001001";
-    constant NOT_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------0111";
-    constant OR_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1011";
-    constant OR_imm_R0 : std_logic_vector(15 downto 0) := "11001011--------";
-    constant OR_B_imm_GBR : std_logic_vector(15 downto 0) := "11001111--------";
-    constant ROTCL_Rn : std_logic_vector(15 downto 0) := "0100----00100100";
-    constant ROTCR_Rn : std_logic_vector(15 downto 0) := "0100----00100101";
-    constant ROTL_Rn : std_logic_vector(15 downto 0) := "0100----00000100";
-    constant ROTR_Rn : std_logic_vector(15 downto 0) := "0100----00000101";
-    constant RTE : std_logic_vector(15 downto 0) := "0000000000101011";
-    constant RTS : std_logic_vector(15 downto 0) := "0000000000001011";
-    constant SETT : std_logic_vector(15 downto 0) := "0000000000011000";
-    constant SHAL_Rn : std_logic_vector(15 downto 0) := "0100----00100000";
-    constant SHAR_Rn : std_logic_vector(15 downto 0) := "0100----00100001";
-    constant SHLL_Rn : std_logic_vector(15 downto 0) := "0100----00000000";
-    constant SHLR_Rn : std_logic_vector(15 downto 0) := "0100----00000001";
+    CONSTANT NEG_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1011";
+    CONSTANT NEGC_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1010";
+    CONSTANT NOP : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000000000001001";
+    CONSTANT NOT_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0111";
+    CONSTANT OR_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1011";
+    CONSTANT OR_imm_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001011--------";
+    CONSTANT OR_B_imm_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001111--------";
+    CONSTANT ROTCL_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00100100";
+    CONSTANT ROTCR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00100101";
+    CONSTANT ROTL_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00000100";
+    CONSTANT ROTR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00000101";
+    CONSTANT RTE : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000000000101011";
+    CONSTANT RTS : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000000000001011";
+    CONSTANT SETT : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000000000011000";
+    CONSTANT SHAL_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00100000";
+    CONSTANT SHAR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00100001";
+    CONSTANT SHLL_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00000000";
+    CONSTANT SHLR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00000001";
     --constant SHLL2_Rn : std_logic_vector(15 downto 0) := "0100----00001000";
     --constant SHLR2_Rn : std_logic_vector(15 downto 0) := "0100----00001001";
     --constant SHLL8_Rn : std_logic_vector(15 downto 0) := "0100----00011000";
     --constant SHLR8_Rn : std_logic_vector(15 downto 0) := "0100----00011001";
     --constant SHLL16_Rn : std_logic_vector(15 downto 0) := "0100----00101000";
     --constant SHLR16_Rn : std_logic_vector(15 downto 0) := "0100----00101001";
-    constant SLEEP : std_logic_vector(15 downto 0) := "0000000000011011";
-    constant STC_SR_Rn : std_logic_vector(15 downto 0) := "0000----00000010";
-    constant STC_GBR_Rn : std_logic_vector(15 downto 0) := "0000----00010010";
-    constant STC_VBR_Rn : std_logic_vector(15 downto 0) := "0000----00100010";
-    constant STC_L_SR_Rn : std_logic_vector(15 downto 0) := "0100----00000011";
-    constant STC_L_GBR_Rn : std_logic_vector(15 downto 0) := "0100----00010011";
-    constant STC_L_VBR_Rn : std_logic_vector(15 downto 0) := "0100----00100011";
+    CONSTANT SLEEP : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000000000011011";
+    CONSTANT STC_SR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000----00000010";
+    CONSTANT STC_GBR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000----00010010";
+    CONSTANT STC_VBR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000----00100010";
+    CONSTANT STC_L_SR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00000011";
+    CONSTANT STC_L_GBR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00010011";
+    CONSTANT STC_L_VBR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00100011";
     --constant STS_MACH_Rn : std_logic_vector(15 downto 0) := "0000----00001010";
     --constant STS_MACL_Rn : std_logic_vector(15 downto 0) := "0000----00011010";
-    constant STS_PR_Rn : std_logic_vector(15 downto 0) := "0000----00101010";
+    CONSTANT STS_PR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000----00101010";
     --constant STS_L_MACH_Rn : std_logic_vector(15 downto 0) := "0100----00000010";
     --constant STS_L_MACL_Rn : std_logic_vector(15 downto 0) := "0100----00010010";
-    constant STS_L_PR_Rn : std_logic_vector(15 downto 0) := "0100----00100010";
-    constant SUB_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1000";
-    constant SUBC_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1010";
-    constant SUBV_Rm_Rn : std_logic_vector(15 downto 0) := "0011--------1011";
-    constant SWAP_B_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1000";
-    constant SWAP_W_Rm_Rn : std_logic_vector(15 downto 0) := "0110--------1001";
-    constant TAS_B_Rn : std_logic_vector(15 downto 0) := "0100----00011011";
-    constant TRAPA_imm : std_logic_vector(15 downto 0) := "11000011--------";
-    constant TST_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1000";
-    constant TST_imm_R0 : std_logic_vector(15 downto 0) := "11001000--------";
-    constant TST_B_imm_GBR : std_logic_vector(15 downto 0) := "11001100--------";
-    constant XTRCT_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1101";
-    constant XOR_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1010";
-    constant XOR_imm_R0 : std_logic_vector(15 downto 0) := "11001010--------";
-    constant XOR_B_imm_GBR : std_logic_vector(15 downto 0) := "11001110--------";
-end SH2_IR_Constants;
+    CONSTANT STS_L_PR_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00100010";
+    CONSTANT SUB_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------1000";
+    CONSTANT SUBC_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------1010";
+    CONSTANT SUBV_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------1011";
+    CONSTANT SWAP_B_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1000";
+    CONSTANT SWAP_W_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1001";
+    CONSTANT TAS_B_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00011011";
+    CONSTANT TRAPA_imm : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000011--------";
+    CONSTANT TST_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1000";
+    CONSTANT TST_imm_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001000--------";
+    CONSTANT TST_B_imm_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001100--------";
+    CONSTANT XTRCT_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1101";
+    CONSTANT XOR_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1010";
+    CONSTANT XOR_imm_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001010--------";
+    CONSTANT XOR_B_imm_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001110--------";
+END SH2_IR_Constants;
 
-library ieee;
-use ieee.std_logic_1164.ALL;
-use ieee.numeric_std.all;
-use work.SH2_CPU_Constants.all;
-use work.SH2_IR_Constants.all;
-use work.array_type_pkg.all;
-use ieee.std_logic_textio.all;  -- Needed for to_hstring
+LIBRARY ieee;
+USE ieee.std_logic_1164.ALL;
+USE ieee.numeric_std.ALL;
+USE work.SH2_CPU_Constants.ALL;
+USE work.SH2_IR_Constants.ALL;
+USE work.array_type_pkg.ALL;
+USE ieee.std_logic_textio.ALL; -- Needed for to_hstring
+ENTITY CPUtoplevel IS
+    PORT (
 
+        Reset : IN STD_LOGIC; -- reset signal (active low)
 
-entity CPUtoplevel is
-    port(
-        
-        Reset   :  in     std_logic;                       -- reset signal (active low)
+        NMI : IN STD_LOGIC; -- non-maskable interrupt signal (falling edge)
+        INT : IN STD_LOGIC; -- maskable interrupt signal (active low)
 
-        NMI     :  in     std_logic;                       -- non-maskable interrupt signal (falling edge)
-        INT     :  in     std_logic;                       -- maskable interrupt signal (active low)
+        RE0 : OUT STD_LOGIC; -- first byte active low read enable
+        RE1 : OUT STD_LOGIC; -- second byte active low read enable
+        RE2 : OUT STD_LOGIC; -- third byte active low read enable
+        RE3 : OUT STD_LOGIC; -- fourth byte active low read enable
+        WE0 : OUT STD_LOGIC; -- first byte active low write enable
+        WE1 : OUT STD_LOGIC; -- second byte active low write enable
+        WE2 : OUT STD_LOGIC; -- third byte active low write enable
+        WE3 : OUT STD_LOGIC; -- fourth byte active low write enable
 
-        RE0     :  out    std_logic;                       -- first byte active low read enable
-        RE1     :  out    std_logic;                       -- second byte active low read enable
-        RE2     :  out    std_logic;                       -- third byte active low read enable
-        RE3     :  out    std_logic;                       -- fourth byte active low read enable
-        WE0     :  out    std_logic;                       -- first byte active low write enable
-        WE1     :  out    std_logic;                       -- second byte active low write enable
-        WE2     :  out    std_logic;                       -- third byte active low write enable
-        WE3     :  out    std_logic;                       -- fourth byte active low write enable
-
-        SH2clock      : in std_logic;
-        SH2DataBus : buffer  std_logic_vector(regLen - 1 downto 0);   -- stores data to read/write from memory
-        SH2AddressBus : buffer  std_logic_vector(regLen - 1 downto 0)   -- stores address to read/write from memory
+        SH2clock : IN STD_LOGIC;
+        SH2DataBus : BUFFER STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); -- stores data to read/write from memory
+        SH2AddressBus : BUFFER STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) -- stores address to read/write from memory
 
     );
-end CPUtoplevel;
-
- 
-architecture Structural of CPUtoplevel is
+END CPUtoplevel;
+ARCHITECTURE Structural OF CPUtoplevel IS
 
     -- Control Signals --
     --==================================================================================================================================================
     ------------------------------------------------------------------------------------------------------------------
     -- REG ARRAY FROM CONTROL UNIT INPUTS (for selecting reg in/out control)
-    signal SH2RegIn      : std_logic_vector(regLen - 1 downto 0) := (others => '0');
-    signal SH2RegInSel   : integer  range regCount - 1 downto 0 := 0;
-    signal SH2RegStore   : std_logic := '0';
-    signal SH2RegASel    : integer  range regCount - 1 downto 0 := 0;
-    signal SH2RegBSel    : integer  range regCount - 1 downto 0 := 0;
-    signal SH2RegAx      : std_logic_vector(regLen - 1 downto 0) := (others => '0');
-    signal SH2RegAxIn    : std_logic_vector(regLen - 1 downto 0) := (others => '0');
-    signal SH2RegAxInSel : integer  range regCount - 1 downto 0 := 0;
-    signal SH2RegAxStore : std_logic := '0';
-    signal SH2RegA1Sel   : integer  range regCount - 1 downto 0 := 0;
-    signal SH2RegA2Sel   : integer  range regCount - 1 downto 0 := 0;
+    SIGNAL SH2RegIn : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+    SIGNAL SH2RegInSel : INTEGER RANGE regCount - 1 DOWNTO 0 := 0;
+    SIGNAL SH2RegStore : STD_LOGIC := '0';
+    SIGNAL SH2RegASel : INTEGER RANGE regCount - 1 DOWNTO 0 := 0;
+    SIGNAL SH2RegBSel : INTEGER RANGE regCount - 1 DOWNTO 0 := 0;
+    SIGNAL SH2RegAx : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+    SIGNAL SH2RegAxIn : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+    SIGNAL SH2RegAxInSel : INTEGER RANGE regCount - 1 DOWNTO 0 := 0;
+    SIGNAL SH2RegAxStore : STD_LOGIC := '0';
+    SIGNAL SH2RegA1Sel : INTEGER RANGE regCount - 1 DOWNTO 0 := 0;
+    SIGNAL SH2RegA2Sel : INTEGER RANGE regCount - 1 DOWNTO 0 := 0;
     ------------------------------------------------------------------------------------------------------------------
     -- ALU FROM CONTROL UNIT INPUTS (for ALU operation control)
-    signal SH2FCmd     : std_logic_vector(3 downto 0) := (others => '0');         -- F-Block operation
-    signal SH2Cin      : std_logic := '0';                                        -- Loads in the carry in bit
-    signal SH2CinCmd   : std_logic_vector(1 downto 0) := (others => '0');         -- carry in operation
-    signal SH2SCmd     : std_logic_vector(2 downto 0) := (others => '0');         -- shift operation
-    signal SH2ALUCmd   : std_logic_vector(1 downto 0) := (others => '0');         -- ALU result select
+    SIGNAL SH2FCmd : STD_LOGIC_VECTOR(3 DOWNTO 0) := (OTHERS => '0'); -- F-Block operation
+    SIGNAL SH2Cin : STD_LOGIC := '0'; -- Loads in the carry in bit
+    SIGNAL SH2CinCmd : STD_LOGIC_VECTOR(1 DOWNTO 0) := (OTHERS => '0'); -- carry in operation
+    SIGNAL SH2SCmd : STD_LOGIC_VECTOR(2 DOWNTO 0) := (OTHERS => '0'); -- shift operation
+    SIGNAL SH2ALUCmd : STD_LOGIC_VECTOR(1 DOWNTO 0) := (OTHERS => '0'); -- ALU result select
     -- ALU additional from control line inputs (not directly from generic ALU)
-    signal SH2ALUImmediateOperand      : std_logic_vector(regLen-1 downto 0) := (others => '0'); -- control unit should pad it (with 1s or 0s
-                                                                                                -- based on whether it's signed or not)
-                                                                                                -- before giving us immediate operand
-    signal SH2ALUUseImmediateOperand   : std_logic; -- 1 for use immediate operand, 0 otherwise
-    signal SH2ALUOpAImmediate      : std_logic_vector(regLen-1 downto 0) := (others => '0'); -- control unit should pad it (with 1s or 0s
+    SIGNAL SH2ALUImmediateOperand : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- control unit should pad it (with 1s or 0s
     -- based on whether it's signed or not)
     -- before giving us immediate operand
-    signal SH2ALUOpAUseImmediateOperand   : std_logic; -- 1 for use immediate operand, 0 otherwise
+    SIGNAL SH2ALUUseImmediateOperand : STD_LOGIC; -- 1 for use immediate operand, 0 otherwise
+    SIGNAL SH2ALUOpAImmediate : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- control unit should pad it (with 1s or 0s
+    -- based on whether it's signed or not)
+    -- before giving us immediate operand
+    SIGNAL SH2ALUOpAUseImmediateOperand : STD_LOGIC; -- 1 for use immediate operand, 0 otherwise
     -- ALU OUTPUTS
-    signal SH2ALUResult   : std_logic_vector(regLen - 1 downto 0) := (others => '0');            -- ALU result
-    signal FlagBus        : std_logic_vector(4 downto 0) := (others => '0');                     -- Flags are Cout, HalfCout, Overflow, Zero, Sign
+    SIGNAL SH2ALUResult : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- ALU result
+    SIGNAL FlagBus : STD_LOGIC_VECTOR(4 DOWNTO 0) := (OTHERS => '0'); -- Flags are Cout, HalfCout, Overflow, Zero, Sign
     ------------------------------------------------------------------------------------------------------------------
     -- DMAU FROM CONTROL LINE INPUTS
-    signal SH2DMAUReset      : std_logic := '0';
-    signal SH2DMAUSrcSel     : integer  range dmauSourceCount - 1 downto 0 := 0;
-    signal SH2DMAUOffsetSel  : integer  range dmauOffsetCount - 1 downto 0 := 0;
-    signal SH2DMAUIncDecSel  : std_logic := '0';
-    signal SH2DMAUIncDecBit  : integer  range maxIncDecBitDMAU downto 0 := 0;
-    signal SH2DMAUPrePostSel : std_logic := '0';
+    SIGNAL SH2DMAUReset : STD_LOGIC := '0';
+    SIGNAL SH2DMAUSrcSel : INTEGER RANGE dmauSourceCount - 1 DOWNTO 0 := 0;
+    SIGNAL SH2DMAUOffsetSel : INTEGER RANGE dmauOffsetCount - 1 DOWNTO 0 := 0;
+    SIGNAL SH2DMAUIncDecSel : STD_LOGIC := '0';
+    SIGNAL SH2DMAUIncDecBit : INTEGER RANGE maxIncDecBitDMAU DOWNTO 0 := 0;
+    SIGNAL SH2DMAUPrePostSel : STD_LOGIC := '0';
     -- DMAU added inputs (not directly from generic MAU)
-    signal DMAUImmediateSource :  std_logic_vector(regLen-1 downto 0) := (others => '0');
-    signal DMAUImmediateOffset :  std_logic_vector(regLen-1 downto 0) := (others => '0');
+    SIGNAL DMAUImmediateSource : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+    SIGNAL DMAUImmediateOffset : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
     -- DMAU OUTPUTS
-    signal SH2CalculatedDataAddress: std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU output address
-    signal SH2DataAddressSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
-                                                                                        -- (Need control line to see which src)
+    SIGNAL SH2CalculatedDataAddress : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- DMAU output address
+    SIGNAL SH2DataAddressSrc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- DMAU input address, updated
+    -- (Need control line to see which src)
 
-        -- Read and Write flags that the PMAU sets
-    signal WriteToMemoryL : std_logic := NO_WRITE_TO_MEMORY;  -- active high
-    signal ReadFromMemoryL : std_logic := NO_WRITE_TO_MEMORY;  -- active high
+    -- Read and Write flags that the PMAU sets
+    SIGNAL WriteToMemoryL : STD_LOGIC := NO_WRITE_TO_MEMORY; -- active high
+    SIGNAL ReadFromMemoryL : STD_LOGIC := NO_WRITE_TO_MEMORY; -- active high
 
     -------------------------------------------------------------------------------------
     -- PMAU FROM CONTROL LINE INPUTS
-    signal SH2PMAUHold      : std_logic := '0';
-    signal SH2PMAUSrcSel     : integer  range pmauSourceCount - 1 downto 0 := 0;
-    signal SH2PMAUOffsetSel  : integer  range pmauOffsetCount - 1 downto 0 := 0;
-    signal SH2PMAUIncDecSel  : std_logic := '0';
-    signal SH2PMAUIncDecBit  : integer  range maxIncDecBitPMAU downto 0 := 0;
-    signal SH2PMAUPrePostSel : std_logic := '0';
+    SIGNAL SH2PMAUHold : STD_LOGIC := '0';
+    SIGNAL SH2PMAUSrcSel : INTEGER RANGE pmauSourceCount - 1 DOWNTO 0 := 0;
+    SIGNAL SH2PMAUOffsetSel : INTEGER RANGE pmauOffsetCount - 1 DOWNTO 0 := 0;
+    SIGNAL SH2PMAUIncDecSel : STD_LOGIC := '0';
+    SIGNAL SH2PMAUIncDecBit : INTEGER RANGE maxIncDecBitPMAU DOWNTO 0 := 0;
+    SIGNAL SH2PMAUPrePostSel : STD_LOGIC := '0';
     -- PMAU added inputs (not directly from generic MAU)
-    signal PMAUImmediateSource : std_logic_vector(regLen-1 downto 0) := (others => '0');
-    signal PMAUImmediateOffset : std_logic_vector(regLen-1 downto 0) := (others => '0');
+    SIGNAL PMAUImmediateSource : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+    SIGNAL PMAUImmediateOffset : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
 
     -- PMAU OUTPUTS
-    signal SH2ProgramAddressBus : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- PMAU input address, updated
-                                                                                            -- (Control unit uses to update PC)
+    SIGNAL SH2ProgramAddressBus : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- PMAU input address, updated
+    -- (Control unit uses to update PC)
     ------------------------------------------------------------------------------------------
-    
+
     -- Outputs
     --==================================================================================================================================================
     -- CONTROL OUTPUTS
-    signal SH2SelDataBus    : integer range NUM_DATA_BUS_OPTIONS downto 0 := OPEN_DATA_BUS;     -- do not update, update with reg output, or update with ALU output
-    signal SH2SelAddressBus : integer range NUM_ADDRESS_BUS_OPTIONS downto 0 := OPEN_ADDRESS_BUS;  -- do not update, update with PMAU address out, or update with DMAU address out
+    SIGNAL SH2SelDataBus : INTEGER RANGE NUM_DATA_BUS_OPTIONS DOWNTO 0 := OPEN_DATA_BUS; -- do not update, update with reg output, or update with ALU output
+    SIGNAL SH2SelAddressBus : INTEGER RANGE NUM_ADDRESS_BUS_OPTIONS DOWNTO 0 := OPEN_ADDRESS_BUS; -- do not update, update with PMAU address out, or update with DMAU address out
     ------------------------------------------------------------------------------------------
     -- Outputs of registers; get hooked up to ALU and PMAU and DMAU
-    signal RegArrayOutA  : std_logic_vector(regLen - 1 downto 0) := (others => '0');
-    signal RegArrayOutB  : std_logic_vector(regLen - 1 downto 0) := (others => '0');
-    signal RegArrayOutA1 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
-    signal RegArrayOutA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    SIGNAL RegArrayOutA : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+    SIGNAL RegArrayOutB : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+    SIGNAL RegArrayOutA1 : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+    SIGNAL RegArrayOutA2 : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
 
-    signal HoldRegA : std_logic_vector(regLen - 1 downto 0) := (others => '0');
-    signal HoldRegA2 : std_logic_vector(regLen - 1 downto 0) := (others => '0');
+    SIGNAL HoldRegA : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+    SIGNAL HoldRegA2 : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
 
-    signal SH2PC : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- the PC: a very special register!
-    signal SH2PC_next : std_logic_vector(regLen - 1 downto 0) := (others => '0'); -- what to set PC to on next rising edge of clock
+    SIGNAL SH2PC : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- the PC: a very special register!
+    SIGNAL SH2PC_next : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- what to set PC to on next rising edge of clock
     ------------------------------------------------------------------------------------------
 
     -- Signals and states
     --==================================================================================================================================================
     -- CPU top level signals; finite state machine and IR
-    type states is (ZERO_CLK,  FETCH_IR, END_OF_FILE); 
+    TYPE states IS (ZERO_CLK, FETCH_IR, END_OF_FILE);
     --TWO_CLK_W, TWO_CLK_R, THREE_CLK_R, THREE_CLK_W);
-    signal CurrentState     : states;
+    SIGNAL CurrentState : states;
 
-    signal InstructionReg   : std_logic_vector(instrLen - 1 downto 0) := (others => 'Z'); -- IR
-    signal PrevIR : std_logic_vector(instrLen - 1 downto 0) := (others => 'Z'); -- IR
-    signal ClockCounter     : std_logic_vector(regLen - 1 downto 0); -- what clock cycle are we on?
+    SIGNAL InstructionReg : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0) := (OTHERS => 'Z'); -- IR
+    SIGNAL PrevIR : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0) := (OTHERS => 'Z'); -- IR
+    SIGNAL ClockCounter : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); -- what clock cycle are we on?
 
-    signal SignExtend : std_logic_vector(regLen - 1 downto 0);
+    SIGNAL SignExtend : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0);
 
-begin
+BEGIN
 
     -- ================================================================================================== Entity Instantiations
     -- Instantiate register array
-    SH2RegArray : entity work.SH2RegArray
-        port map (
-            SH2RegIn      => SH2RegIn,         -- hook up to port inputs
-            SH2RegInSel   => SH2RegInSel,      -- so control unit can input
-            SH2RegStore   => SH2RegStore,  
-            SH2RegASel    => SH2RegASel,
-            SH2RegBSel    => SH2RegBSel,
-            SH2RegAxIn    => SH2RegAxIn,
+    SH2RegArray : ENTITY work.SH2RegArray
+        PORT MAP(
+            SH2RegIn => SH2RegIn, -- hook up to port inputs
+            SH2RegInSel => SH2RegInSel, -- so control unit can input
+            SH2RegStore => SH2RegStore,
+            SH2RegASel => SH2RegASel,
+            SH2RegBSel => SH2RegBSel,
+            SH2RegAxIn => SH2RegAxIn,
             Sh2RegAxInSel => SH2RegAxInSel,
             SH2RegAxStore => SH2RegAxStore,
-            SH2RegA1Sel   => SH2RegA1Sel,
-            SH2RegA2Sel   => SH2RegA2Sel,
-            SH2clock      => SH2clock,
-            SH2RegA       => RegArrayOutA,
-            SH2RegB       => RegArrayOutB,
-            SH2RegA1      => RegArrayOutA1,
-            SH2RegA2      => RegArrayOutA2
+            SH2RegA1Sel => SH2RegA1Sel,
+            SH2RegA2Sel => SH2RegA2Sel,
+            SH2clock => SH2clock,
+            SH2RegA => RegArrayOutA,
+            SH2RegB => RegArrayOutB,
+            SH2RegA1 => RegArrayOutA1,
+            SH2RegA2 => RegArrayOutA2
         );
-
-
     -- Instantiate ALU
-    SH2ALU : entity work.SH2ALU
-        port map (
-            SH2ALUOpA   => RegArrayOutA,              -- Control unit will set operands,
-            SH2ALUOpB   => RegArrayOutA2,              -- to be output from the register array (if they so exist)
-            SH2ALUImmediateOperand => SH2ALUImmediateOperand,           -- can also be immediate (in instruction)
+    SH2ALU : ENTITY work.SH2ALU
+        PORT MAP(
+            SH2ALUOpA => RegArrayOutA, -- Control unit will set operands,
+            SH2ALUOpB => RegArrayOutA2, -- to be output from the register array (if they so exist)
+            SH2ALUImmediateOperand => SH2ALUImmediateOperand, -- can also be immediate (in instruction)
             SH2ALUOpAImmediate => SH2ALUOpAImmediate,
             SH2ALUOpAUseImmediateOperand => SH2ALUOPAUseImmediateOperand,
-            SH2ALUUseImmediateOperand => SH2ALUUseImmediateOperand, 
-            SH2Cin      =>  SH2Cin, -- Cin comes from T bit of SR, which is the rightmost bit                    
-            SH2FCmd     => SH2FCmd, 
-            SH2CinCmd   => SH2CinCmd, 
-            SH2SCmd     => SH2SCmd, 
-            SH2ALUCmd   => SH2ALUCmd, 
-            SH2ALUResult   => SH2ALUResult,  -- now we are just hooking up outputs
-            FlagBus     => FlagBus
+            SH2ALUUseImmediateOperand => SH2ALUUseImmediateOperand,
+            SH2Cin => SH2Cin, -- Cin comes from T bit of SR, which is the rightmost bit                    
+            SH2FCmd => SH2FCmd,
+            SH2CinCmd => SH2CinCmd,
+            SH2SCmd => SH2SCmd,
+            SH2ALUCmd => SH2ALUCmd,
+            SH2ALUResult => SH2ALUResult, -- now we are just hooking up outputs
+            FlagBus => FlagBus
         );
 
     -- Instantiate DMAU
-    SH2DMAU : entity  work.SH2DMAU
-        port map(
-            SH2DMAURegSource => RegArrayOutA, 
-            SH2DMAUImmediateSource => DMAUImmediateSource, 
-            SH2DMAURegOffset => RegArrayOutB, 
-            SH2DMAUImmediateOffset => DMAUImmediateOffset, 
+    SH2DMAU : ENTITY work.SH2DMAU
+        PORT MAP(
+            SH2DMAURegSource => RegArrayOutA,
+            SH2DMAUImmediateSource => DMAUImmediateSource,
+            SH2DMAURegOffset => RegArrayOutB,
+            SH2DMAUImmediateOffset => DMAUImmediateOffset,
             SH2DMAUSrcSel => SH2DMAUSrcSel,
-            SH2DMAUOffsetSel => SH2DMAUOffsetSel, 
-            SH2DMAUIncDecSel  => SH2DMAUIncDecSel, 
-            SH2DMAUIncDecBit  => SH2DMAUIncDecBit, 
-            SH2DMAUPrePostSel => SH2DMAUPrePostSel, 
-            SH2DataAddressBus => SH2CalculatedDataAddress,       -- just GBR?
+            SH2DMAUOffsetSel => SH2DMAUOffsetSel,
+            SH2DMAUIncDecSel => SH2DMAUIncDecSel,
+            SH2DMAUIncDecBit => SH2DMAUIncDecBit,
+            SH2DMAUPrePostSel => SH2DMAUPrePostSel,
+            SH2DataAddressBus => SH2CalculatedDataAddress, -- just GBR?
             SH2DataAddressSrc => SH2DataAddressSrc
         );
 
     -- Instantiate PMAU
-    SH2PMAU : entity  work.SH2PMAU
-        port map(
+    SH2PMAU : ENTITY work.SH2PMAU
+        PORT MAP(
             SH2PMAUHold => SH2PMAUHold,
             SH2PC => SH2PC,
-            SH2PMAURegSource => RegArrayOutA, 
-            SH2PMAUImmediateSource => PMAUImmediateSource, 
-            SH2PMAURegOffset => RegArrayOutB, 
-            SH2PMAUImmediateOffset => PMAUImmediateOffset, 
+            SH2PMAURegSource => RegArrayOutA,
+            SH2PMAUImmediateSource => PMAUImmediateSource,
+            SH2PMAURegOffset => RegArrayOutB,
+            SH2PMAUImmediateOffset => PMAUImmediateOffset,
             SH2PMAUSrcSel => SH2PMAUSrcSel,
-            SH2PMAUOffsetSel => SH2PMAUOffsetSel, 
-            SH2PMAUIncDecSel  => SH2PMAUIncDecSel, 
-            SH2PMAUIncDecBit  => SH2PMAUIncDecBit, 
-            SH2PMAUPrePostSel => SH2PMAUPrePostSel, 
-            SH2ProgramAddressBus => SH2PC_next        --make the PC come out into here
-            );    
-    
+            SH2PMAUOffsetSel => SH2PMAUOffsetSel,
+            SH2PMAUIncDecSel => SH2PMAUIncDecSel,
+            SH2PMAUIncDecBit => SH2PMAUIncDecBit,
+            SH2PMAUPrePostSel => SH2PMAUPrePostSel,
+            SH2ProgramAddressBus => SH2PC_next --make the PC come out into here
+        );
+
     -- ================================================================================================== Finite State Machine
-    updatePCandIRandSetNextState: process(SH2clock)
+    updatePCandIRandSetNextState : PROCESS (SH2clock)
         --========================================================== Procedures
-        procedure holdPC is
-        begin
-            SH2PMAUHold            <= PMAU_HOLD;
-            SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
-            PMAUImmediateOffset     <= DEFAULT_OFFSET_VAL;
-            SH2PMAUOffsetSel        <= DEFAULT_OFFSET_SEL;
-            SH2PMAUIncDecSel        <= DEFAULT_DEC_SEL;
-            SH2PMAUIncDecBit        <= DEFAULT_BIT;
-            SH2PMAUPrePostSel       <= DEFAULT_POST_SEL; 
-        end procedure;
+        PROCEDURE holdPC IS
+        BEGIN
+            SH2PMAUHold <= PMAU_HOLD;
+            SH2PMAUSrcSel <= DEFAULT_SRC_SEL;
+            PMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
+            SH2PMAUOffsetSel <= DEFAULT_OFFSET_SEL;
+            SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
+            SH2PMAUIncDecBit <= DEFAULT_BIT;
+            SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
+        END PROCEDURE;
 
-        procedure incPC is 
-        begin
-            SH2PMAUHold            <= PMAU_NO_HOLD;
-            SH2PMAUSrcSel           <= DEFAULT_SRC_SEL;
-            SH2PMAUOffsetSel        <= DEFAULT_NO_OFF_VAL;
-            SH2PMAUIncDecSel        <= DEFAULT_INC_SEL;
-            SH2PMAUIncDecBit        <= DEFAULT_BIT;
-            SH2PMAUPrePostSel       <= DEFAULT_PRE_SEL;
-            SH2PC <= SH2PC_next; 
-        end procedure;
+        PROCEDURE incPC IS
+        BEGIN
+            SH2PMAUHold <= PMAU_NO_HOLD;
+            SH2PMAUSrcSel <= DEFAULT_SRC_SEL;
+            SH2PMAUOffsetSel <= DEFAULT_NO_OFF_VAL;
+            SH2PMAUIncDecSel <= DEFAULT_INC_SEL;
+            SH2PMAUIncDecBit <= DEFAULT_BIT;
+            SH2PMAUPrePostSel <= DEFAULT_PRE_SEL;
+            SH2PC <= SH2PC_next;
+        END PROCEDURE;
 
-        procedure disableReadWrite is
-        begin
-            WE0 <= '1'; WE1 <= '1'; WE2 <= '1'; WE3 <= '1'; 
-            RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1';
-        end procedure;
+        PROCEDURE disableReadWrite IS
+        BEGIN
+            WE0 <= '1';
+            WE1 <= '1';
+            WE2 <= '1';
+            WE3 <= '1';
+            RE0 <= '1';
+            RE1 <= '1';
+            RE2 <= '1';
+            RE3 <= '1';
+        END PROCEDURE;
 
-    begin
+    BEGIN
 
         -- Rising edge: Update state, load PC, load IR
         --=====================================================================================
-        if rising_edge(SH2clock) then
+        IF rising_edge(SH2clock) THEN
 
-           disableReadWrite;
+            disableReadWrite;
 
             -- Update state on rising edge
-            case CurrentState is 
-                when ZERO_CLK =>
-                    
+            CASE CurrentState IS
+                WHEN ZERO_CLK =>
+
                     holdPC;
                     ------------------------------------------------ Update state
-                    if (Reset = '1') then 
-                        CurrentState <= FETCH_IR;    -- CPU is enabled for the first time
+                    IF (Reset = '1') THEN
+                        CurrentState <= FETCH_IR; -- CPU is enabled for the first time
                         -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z.
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; 
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT;
                         SH2SelDataBus <= HOLD_DATA_BUS;
-                    else 
-                        CurrentState <= ZERO_CLK;                      -- CPU is still in reset mode (off)
+                    ELSE
+                        CurrentState <= ZERO_CLK; -- CPU is still in reset mode (off)
                         -- For the next state: Set data, address buses to high impedance so that test bench can write them
                         SH2SelAddressBus <= OPEN_ADDRESS_BUS;
                         SH2SelDataBus <= OPEN_DATA_BUS;
-                    end if;
-                when FETCH_IR => 
+                    END IF;
+                WHEN FETCH_IR =>
 
                     -------------------------------------------------- Update the IR, clock cycle, and PC
 
-                    RE0 <= '0'; RE1 <= '0'; RE2 <= '1'; RE3 <= '1';  -- Read low bytes in (instructions stored in low bytes)
-                    ClockCounter            <= ONE_CLOCK;       --Set clock counter back to 1
+                    RE0 <= '0';
+                    RE1 <= '0';
+                    RE2 <= '1';
+                    RE3 <= '1'; -- Read low bytes in (instructions stored in low bytes)
+                    ClockCounter <= ONE_CLOCK; --Set clock counter back to 1
                     incPC;
 
                     ------------------------------------------------ Set next state
-                    if (InstructionReg = "XXXXXXXXXXXXXXXX") then 
-                        report "End of file reached.";
+                    IF (InstructionReg = "XXXXXXXXXXXXXXXX") THEN
+                        REPORT "End of file reached.";
                         CurrentState <= END_OF_FILE;
 
                         -- For the next state: Set data, address buses to high impedance so that test bench can write them
                         SH2SelAddressBus <= OPEN_ADDRESS_BUS;
                         SH2SelDataBus <= HOLD_DATA_BUS;
 
-                    else 
+                    ELSE
                         CurrentState <= FETCH_IR;
 
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; -- Open data bus for next read-in of codespace
                         SH2SelDataBus <= OPEN_DATA_BUS;
 
-                    end if;
-                    
-                when others =>  -- End of File or invalid state
-                    
+                    END IF;
+
+                WHEN OTHERS => -- End of File or invalid state
+
                     holdPC;
                     CurrentState <= END_OF_FILE;
                     InstructionReg <= NOP;
 
                     -- For the next state: prepare to load in the first instruction. Data bus needs to be high-Z
                     SH2SelAddressBus <= OPEN_ADDRESS_BUS;
-                    SH2SelDataBus <= OPEN_DATA_BUS; 
+                    SH2SelDataBus <= OPEN_DATA_BUS;
 
-            end case;
+            END CASE;
 
-            if (Reset = '0') then 
-                CurrentState <= ZERO_CLK;   -- We are resetting
-            end if;
+            IF (Reset = '0') THEN
+                CurrentState <= ZERO_CLK; -- We are resetting
+            END IF;
 
-        end if;
+        END IF;
 
         -- Falling edge: Update select address and data bus signals (after they were set by InstrMatch on rising edge)
         --=====================================================================================
-        if falling_edge(SH2clock) then
+        IF falling_edge(SH2clock) THEN
 
             disableReadWrite;
 
             -- Update select address and data bus signals
-            case CurrentState is
-                when ZERO_CLK =>
+            CASE CurrentState IS
+                WHEN ZERO_CLK =>
                     -- nothing to do
 
-                when FETCH_IR =>
-                    
-                    if (WriteToMemoryL = WRITE_TO_MEMORY) then
+                WHEN FETCH_IR =>
+
+                    IF (WriteToMemoryL = WRITE_TO_MEMORY) THEN
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
                         SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
-                        WE0 <= '0'; WE1 <= '0'; WE2 <= '0'; WE3 <= '0';  -- assume address, data bus correctly set in instruction matching
-                    end if;
+                        WE0 <= '0';
+                        WE1 <= '0';
+                        WE2 <= '0';
+                        WE3 <= '0'; -- assume address, data bus correctly set in instruction matching
+                    END IF;
 
-                    if (ReadFromMemoryL = READ_FROM_MEMORY) then
+                    IF (ReadFromMemoryL = READ_FROM_MEMORY) THEN
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
                         SH2SelDataBus <= OPEN_DATA_BUS;
-                        RE0 <= '0'; RE1 <= '0'; RE2 <= '0'; RE3 <= '0';  -- assume address, data bus correctly set in instruction matching
-                    end if;
-                    
-                when others => -- halt the CPU
+                        RE0 <= '0';
+                        RE1 <= '0';
+                        RE2 <= '0';
+                        RE3 <= '0'; -- assume address, data bus correctly set in instruction matching
+                    END IF;
+
+                WHEN OTHERS => -- halt the CPU
                     InstructionReg <= NOP;
-                    
-            end case;
-        end if;
-    end process updatePCandIRandSetNextState;
+
+            END CASE;
+        END IF;
+    END PROCESS updatePCandIRandSetNextState;
 
     --Update the CurrentState to the NextState every rising edge of the clock
     --Set Read and Write to inactive during the rising edge of the clock
-   
-
     -- ================================================================================================== Instruction Decoding, State Determination
     --combinational if statements
     --Matches the 
     --at the end of the matches -> update the currentstate with nextState variable
-    matchInstruction : process(InstructionReg)
-                        
+    matchInstruction : PROCESS (InstructionReg)
+
         -- Set default instruction-specific control signals
         -- Does not include PMAU and address/data bus setting logic, because that is determined
         -- by the state machine
-        
-        --Temproary variable to help with the subtractions with carrys
-        variable SubCarryBus    : std_logic_vector(regLen-1 downto 0) := (others => '0');
 
-        procedure SetDefaultControlSignals is
-        begin
+        --Temproary variable to help with the subtractions with carrys
+        VARIABLE SubCarryBus : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+
+        PROCEDURE SetDefaultControlSignals IS
+        BEGIN
             -- Default RegArray inputs: Do not input any registers, 
             -- only put Reg0 on output buses 
 
             -- Default ALU inputs. Immediate is 0 and not used by default. Carry ins are also 0
-            SH2Cin                    <= DEFAULT_ALU_CIN;
-            SH2FCmd                   <= DEFAULT_ALU_F_CMD;
-            SH2CinCmd                 <= DEFAULT_ALU_CIN_CMD;
-            SH2SCmd                   <= DEFAULT_ALU_S_CMD;
-            SH2ALUCmd                 <= DEFAUL_ALU_CMD;
-            SH2ALUImmediateOperand    <= DEFAULT_ALU_IMM_OP;
+            SH2Cin <= DEFAULT_ALU_CIN;
+            SH2FCmd <= DEFAULT_ALU_F_CMD;
+            SH2CinCmd <= DEFAULT_ALU_CIN_CMD;
+            SH2SCmd <= DEFAULT_ALU_S_CMD;
+            SH2ALUCmd <= DEFAUL_ALU_CMD;
+            SH2ALUImmediateOperand <= DEFAULT_ALU_IMM_OP;
             SH2ALUUseImmediateOperand <= DEFAULT_ALU_USE_IMM;
             SH2ALUOpAUseImmediateOperand <= DEFAULT_ALU_USE_IMM;
-            SH2ALUOpAImmediate        <= DEFAULT_ALU_IMM_OP;
+            SH2ALUOpAImmediate <= DEFAULT_ALU_IMM_OP;
 
             -- Default DMAU inputs
-            SH2DMAUSrcSel       <= DEFAULT_SRC_SEL;
-            SH2DMAUOffsetSel    <= DEFAULT_OFFSET_SEL;
-            SH2DMAUIncDecSel    <= DEFAULT_DEC_SEL;
-            SH2DMAUIncDecBit    <= DEFAULT_BIT;
-            SH2DMAUPrePostSel   <= DEFAULT_POST_SEL;
+            SH2DMAUSrcSel <= DEFAULT_SRC_SEL;
+            SH2DMAUOffsetSel <= DEFAULT_OFFSET_SEL;
+            SH2DMAUIncDecSel <= DEFAULT_DEC_SEL;
+            SH2DMAUIncDecBit <= DEFAULT_BIT;
+            SH2DMAUPrePostSel <= DEFAULT_POST_SEL;
             DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
             DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
 
-        end procedure;
+        END PROCEDURE;
 
-    begin
+    BEGIN
 
-        if CurrentState = FETCH_IR then
+        IF CurrentState = FETCH_IR THEN
             --Default all the units
             SetDefaultControlSignals;
 
@@ -739,744 +745,1020 @@ begin
             --  ==================================================================================================
             -- ARITHMETIC
             -- ==================================================================================================
-            if std_match(InstructionReg, ADD_imm_Rn) then
-
+            IF std_match(InstructionReg, ADD_imm_Rn) THEN
                 -- Setting register ops for ALU
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);   --Select the immediate value from the IR
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
-            
-            elsif std_match(InstructionReg, ADD_Rm_Rn) then
+                SH2FCmd <= "1010"; --Use OpB for the Adder
+                SH2ALUCmd <= "01"; --Select the Adder Output
+                SH2ALUImmediateOperand <= (23 DOWNTO 0 => '0') & InstructionReg(7 DOWNTO 0); --Select the immediate value from the IR
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value
+
+            ELSIF std_match(InstructionReg, ADD_Rm_Rn) THEN
 
                 -- Setting register ops for ALU
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
+                SH2FCmd <= "1010"; --Use OpB for the Adder
+                SH2ALUCmd <= "01"; --Select the Adder Output
 
-            elsif std_match(InstructionReg, ADDC_Rm_Rn) then
+            ELSIF std_match(InstructionReg, ADDC_Rm_Rn) THEN
 
                 -- Setting register ops for ALU
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
 
                 --Setting ALU control signals
-                SH2RegA1Sel                 <= REG_SR;  --Grab the status register to get the T bit
-                SH2Cin                      <= RegArrayOutA1(0);    --Load in the T-bit as Cin
-                SH2CinCmd                   <= "10";    --Set the Cin Adder command to take in Cin
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
+                SH2RegA1Sel <= REG_SR; --Grab the status register to get the T bit
+                SH2Cin <= RegArrayOutA1(0); --Load in the T-bit as Cin
+                SH2CinCmd <= "10"; --Set the Cin Adder command to take in Cin
+                SH2FCmd <= "1010"; --Use OpB for the Adder
+                SH2ALUCmd <= "01"; --Select the Adder Output
 
-            elsif std_match(InstructionReg, ADDV_Rm_Rn) then
+            ELSIF std_match(InstructionReg, ADDV_Rm_Rn) THEN
 
                 -- Setting register ops for ALU
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
-                SH2RegA1Sel                 <= REG_SR;  --Grab the status register to get the T bit
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+                SH2RegA1Sel <= REG_SR; --Grab the status register to get the T bit
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "1010";  --Use OpB for the Adder
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
+                SH2FCmd <= "1010"; --Use OpB for the Adder
+                SH2ALUCmd <= "01"; --Select the Adder Output
 
-            elsif std_match(InstructionReg, SUB_Rm_Rn) then
-
+            ELSIF std_match(InstructionReg, SUB_Rm_Rn) THEN
                 -- Setting register ops for ALU
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "0101";  --Use not OpB for the Adder
-                SH2CinCmd                <= "01";    --Use the 1 option into the Adder
-                                                        --(makes one's complement -> two's complement to do subtraction)
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
 
-            elsif std_match(InstructionReg, SUBC_Rm_Rn) then
+            ELSIF std_match(InstructionReg, SUBC_Rm_Rn) THEN
                 -- Setting register ops for ALU
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
-                SH2RegA1Sel                 <= REG_SR;  --Grab the status register to get the T bit
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+                SH2RegA1Sel <= REG_SR; --Grab the status register to get the T bit
 
                 --Setting ALU control signals
                 --To do: Rn - Rm - T => Rn - (Rm + T)
-                SubCarryBus := std_logic_vector(to_unsigned(
+                SubCarryBus := STD_LOGIC_VECTOR(to_unsigned(
                     to_integer(unsigned(RegArrayOutA2)) +
-                    to_integer(unsigned(std_logic_vector'("0" & RegArrayOutA1(0)))),
+                    to_integer(unsigned(STD_LOGIC_VECTOR'("0" & RegArrayOutA1(0)))),
                     RegArrayOutA2'length));
 
-                SH2ALUImmediateOperand       <= SubCarryBus;
-                SH2ALUUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value for OpB
+                SH2ALUImmediateOperand <= SubCarryBus;
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value for OpB
 
-                SH2FCmd                     <= "0101";  --Use not OpB for the Adder
-                SH2CinCmd                   <= "01";    --Use the 1 option into the Adder
-                                                        --(makes one's complement -> two's complement to do subtraction)
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
 
-            elsif std_match(InstructionReg, SUBV_Rm_Rn) then
+            ELSIF std_match(InstructionReg, SUBV_Rm_Rn) THEN
 
                 -- Setting register ops for ALU
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
-                SH2RegA1Sel                 <= REG_SR;  --Grab the status register to get the T bit
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+                SH2RegA1Sel <= REG_SR; --Grab the status register to get the T bit
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "0101";  --Use not OpB for the Adder
-                SH2CinCmd                <= "01";    --Use the 1 option into the Adder
-                                                        --(makes one's complement -> two's complement to do subtraction)
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
 
-            elsif std_match(InstructionReg, NEG_Rm_Rn) then
+            ELSIF std_match(InstructionReg, NEG_Rm_Rn) THEN
                 -- Setting register ops for ALU
-                SH2ALUOpAImmediate              <= DEFAULT_ALU_IMM_OP;
-                SH2ALUOpAUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
+                SH2ALUOpAImmediate <= DEFAULT_ALU_IMM_OP;
+                SH2ALUOpAUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
 
                 --Setting ALU control signals
-                SH2FCmd                  <= "0101";  --Use not OpB for the Adder
-                SH2CinCmd                <= "01";    --Use the 1 option into the Adder
-                                                        --(makes one's complement -> two's complement to do subtraction)
-                SH2ALUCmd                <= "01";    --Select the Adder Output    
-            
-            elsif std_match(InstructionReg, NEGC_Rm_Rn) then
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output    
+
+            ELSIF std_match(InstructionReg, NEGC_Rm_Rn) THEN
                 -- Setting register ops for ALU
-                SH2ALUOpAImmediate              <= DEFAULT_ALU_IMM_OP;
-                SH2ALUOpAUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
-                SH2RegA1Sel                 <= REG_SR;  --Grab the status register to get the T bit
+                SH2ALUOpAImmediate <= DEFAULT_ALU_IMM_OP;
+                SH2ALUOpAUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+                SH2RegA1Sel <= REG_SR; --Grab the status register to get the T bit
 
                 --Setting ALU control signals
                 --To do: 0 - Rm - T => 0 - (Rm + T)
-                SubCarryBus := std_logic_vector(to_unsigned(
+                SubCarryBus := STD_LOGIC_VECTOR(to_unsigned(
                     to_integer(unsigned(RegArrayOutA2)) +
-                    to_integer(unsigned(std_logic_vector'("0" & RegArrayOutA1(0)))),
+                    to_integer(unsigned(STD_LOGIC_VECTOR'("0" & RegArrayOutA1(0)))),
                     RegArrayOutA2'length));
 
-                SH2ALUImmediateOperand       <= SubCarryBus;
-                SH2ALUUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value for OpB
+                SH2ALUImmediateOperand <= SubCarryBus;
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value for OpB
 
-                SH2FCmd                     <= "0101";  --Use not OpB for the Adder
-                SH2CinCmd                   <= "01";    --Use the 1 option into the Adder
-                                                        --(makes one's complement -> two's complement to do subtraction)
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
 
-            elsif std_match(InstructionReg, EXTS_B_Rm_Rn) then    
-                
-            elsif std_match(InstructionReg, EXTS_W_Rm_Rn) then  
-
-            elsif std_match(InstructionReg, EXTU_B_Rm_Rn) then  
-                SH2ALUOpAImmediate              <= BYTE_MASK;
-                SH2ALUOpAUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;
-
-            elsif std_match(InstructionReg, EXTU_W_Rm_Rn) then  
-                SH2ALUOpAImmediate              <= WORD_MASK;
-                SH2ALUOpAUseImmediateOperand    <= ALU_USE_IMM;     --Use the immediate value
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));    --OpB of ALU comes out of RegArray at Rm
-
-                --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;
-
-            elsif std_match(InstructionReg, DT_Rn) then  
+            ELSIF std_match(InstructionReg, EXTS_B_Rm_Rn) THEN
                 -- Setting register ops for ALU
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn 
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpA of ALU comes out of RegArray at Rn 
+
+                SH2FCmd <= "1100"; --Select OpA
+                SH2ALUCmd <= ALU_FB_SEL; --Select the Fblock Output
+
+            ELSIF std_match(InstructionReg, EXTS_W_Rm_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpA of ALU comes out of RegArray at Rn 
+
+                SH2FCmd <= "1100"; --Select OpA
+                SH2ALUCmd <= ALU_FB_SEL; --Select the Fblock Output
+
+            ELSIF std_match(InstructionReg, EXTU_B_Rm_Rn) THEN
+                SH2ALUOpAImmediate <= BYTE_MASK;
+                SH2ALUOpAUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+
+                --Setting ALU control signals
+                SH2FCmd <= "1000";
+                SH2ALUCmd <= ALU_FB_SEL;
+
+            ELSIF std_match(InstructionReg, EXTU_W_Rm_Rn) THEN
+                SH2ALUOpAImmediate <= WORD_MASK;
+                SH2ALUOpAUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+
+                --Setting ALU control signals
+                SH2FCmd <= "1000";
+                SH2ALUCmd <= ALU_FB_SEL;
+
+            ELSIF std_match(InstructionReg, DT_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
                 SH2ALUImmediateOperand <= "00000000000000000000000000000001";
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;     --Use the immediate value
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value
                 SH2RegA1Sel <= REG_SR;
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "0101";  --Use not OpB for the Adder
-                SH2CinCmd                   <= "01";    --Use the 1 option into the Adder
-                                                        --(makes one's complement -> two's complement to do subtraction)
-                SH2ALUCmd                   <= "01";    --Select the Adder Output
-                                
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
-            elsif std_match(InstructionReg, CMP_EQ_imm_R0) then  
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
 
-
-            --  ==================================================================================================
-            -- SHIFTS (0/8) : Needs testing
-            --  ==================================================================================================
-            elsif std_match(SHLL_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
-                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting
+            ELSIF std_match(InstructionReg, CMP_EQ_imm_R0) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
 
                 --Setting ALU control signals
-                SH2SCmd                     <= "000";   --Left shift left
-                SH2ALUCmd                   <= "10";    --Select the shifter output
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
+                SH2ALUImmediateOperand <= (23 DOWNTO 0 => '0') & InstructionReg(7 DOWNTO 0); --Select the immediate value from the IR
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value
 
-            elsif std_match(SHLR_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn   
-                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting                                 
-
-                --Setting ALU control signals
-                SH2SCmd                     <= "100";   --LSR
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-            
-            elsif std_match(SHAR_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn    
-                SH2RegA2Sel  <= REG_SR;                                             --Grab the status register for Shifting
-        
-                --Setting ALU control signals
-                SH2SCmd                     <= "101";   --ASR
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-        
-            elsif std_match(SHAL_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn  
-                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting                    
+            ELSIF std_match(InstructionReg, CMP_EQ_Rm_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
 
                 --Setting ALU control signals
-                SH2SCmd                     <= "000";   --LSL
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-            
-            elsif std_match(ROTCR_Rn, InstructionReg) then
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
+            ELSIF std_match(InstructionReg, CMP_HS_Rm_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+
+                --Setting ALU control signals
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
+            ELSIF std_match(InstructionReg, CMP_GE_Rm_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+
+                --Setting ALU control signals
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
+            ELSIF std_match(InstructionReg, CMP_HI_Rm_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+
+                --Setting ALU control signals
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
+            ELSIF std_match(InstructionReg, CMP_GT_Rm_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+
+                --Setting ALU control signals
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+                SH2ALUCmd <= "01"; --Select the Adder Output
+            ELSIF std_match(InstructionReg, CMP_PL_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2ALUImmediateOperand <= ALU_ZERO_IMM;
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value
+                SH2RegA1Sel <= REG_SR;
+
+                --Setting ALU control signals
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+            ELSIF std_match(InstructionReg, CMP_PZ_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2ALUImmediateOperand <= ALU_ZERO_IMM;
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM; --Use the immediate value
+                SH2RegA1Sel <= REG_SR;
+
+                --Setting ALU control signals
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+            ELSIF std_match(InstructionReg, CMP_STR_Rm_Rn) THEN
+                -- Setting register ops for ALU
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpB of ALU comes out of RegArray at Rm
+
+                --Setting ALU control signals
+                SH2FCmd <= "0101"; --Use not OpB for the Adder
+                SH2CinCmd <= "01"; --Use the 1 option into the Adder
+                --(makes one's complement -> two's complement to do subtraction)
+
+                --  ==================================================================================================
+                -- SHIFTS (0/8) : Needs testing
+                --  ==================================================================================================
+            ELSIF std_match(SHLL_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn  
+                SH2RegA2Sel <= REG_SR; --Grab the status register for Shifting
+
+                --Setting ALU control signals
+                SH2SCmd <= "000"; --Left shift left
+                SH2ALUCmd <= "10"; --Select the shifter output
+
+            ELSIF std_match(SHLR_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn   
+                SH2RegA2Sel <= REG_SR; --Grab the status register for Shifting                                 
+
+                --Setting ALU control signals
+                SH2SCmd <= "100"; --LSR
+                SH2ALUCmd <= "10"; --Select the shifter output
+
+            ELSIF std_match(SHAR_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn    
+                SH2RegA2Sel <= REG_SR; --Grab the status register for Shifting
+
+                --Setting ALU control signals
+                SH2SCmd <= "101"; --ASR
+                SH2ALUCmd <= "10"; --Select the shifter output
+
+            ELSIF std_match(SHAL_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn  
+                SH2RegA2Sel <= REG_SR; --Grab the status register for Shifting                    
+
+                --Setting ALU control signals
+                SH2SCmd <= "000"; --LSL
+                SH2ALUCmd <= "10"; --Select the shifter output
+
+            ELSIF std_match(ROTCR_Rn, InstructionReg) THEN
                 -- Setting Reg Array control signals                         
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn                                                
+                SH2RegA2Sel <= REG_SR; --Grab the status register for Shifting
 
                 --Setting ALU control signals
-                SH2Cin                      <= RegArrayOutA2(0); --Feed in T-bit into RRC
-                SH2SCmd                     <= "111";   --RRC
-                SH2ALUCmd                   <= "10";    --Select the shifter output
+                SH2Cin <= RegArrayOutA2(0); --Feed in T-bit into RRC
+                SH2SCmd <= "111"; --RRC
+                SH2ALUCmd <= "10"; --Select the shifter output
 
-            elsif std_match(ROTCL_Rn, InstructionReg) then
+            ELSIF std_match(ROTCL_Rn, InstructionReg) THEN
                 -- Setting Reg Array control signals                                
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting
-               
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn                                                
+                SH2RegA2Sel <= REG_SR; --Grab the status register for Shifting
+
                 --Setting ALU control signals
-                SH2Cin                      <= RegArrayOutA2(0); --Feed in T-bit into RLC
-                SH2SCmd                     <= "011";   --Left shift left
-                SH2ALUCmd                   <= "10";    --Select the shifter output
-            
-            elsif std_match(ROTR_Rn, InstructionReg) then
+                SH2Cin <= RegArrayOutA2(0); --Feed in T-bit into RLC
+                SH2SCmd <= "011"; --Left shift left
+                SH2ALUCmd <= "10"; --Select the shifter output
+
+            ELSIF std_match(ROTR_Rn, InstructionReg) THEN
                 -- Setting Reg Array control signals
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn                                                
-                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting
-               
-                --Setting ALU control signals
-                SH2SCmd                     <= "110";   --ROR
-                SH2ALUCmd                   <= "10";    --Select the shifter output
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn                                                
+                SH2RegA2Sel <= REG_SR; --Grab the status register for Shifting
 
-            elsif std_match(ROTL_Rn, InstructionReg) then
+                --Setting ALU control signals
+                SH2SCmd <= "110"; --ROR
+                SH2ALUCmd <= "10"; --Select the shifter output
+
+            ELSIF std_match(ROTL_Rn, InstructionReg) THEN
                 -- Setting Reg Array control signals
-                SH2RegASel  <= to_integer(unsigned(InstructionReg(11 downto 8)));   --OpA of ALU comes out of RegArray at Rn     
-                SH2RegA2Sel  <= REG_SR;                                                  --Grab the status register for Shifting                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn     
+                SH2RegA2Sel <= REG_SR; --Grab the status register for Shifting                             
 
                 --Setting ALU control signals
-                SH2SCmd                     <= "010";   --ROL
-                SH2ALUCmd                   <= "10";    --Select the shifter output
+                SH2SCmd <= "010"; --ROL
+                SH2ALUCmd <= "10"; --Select the shifter output
 
-            --  ==================================================================================================
-            -- LOGICAL 0/9 Needs testing
-            --  ==================================================================================================
-            elsif std_match(AND_Rm_Rn, InstructionReg) then
+                --  ==================================================================================================
+                -- LOGICAL 0/9 Needs testing
+                --  ==================================================================================================
+            ELSIF std_match(AND_Rm_Rn, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-                SH2RegA2Sel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4)));
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;
+                SH2FCmd <= "1000";
+                SH2ALUCmd <= ALU_FB_SEL;
 
-            elsif std_match(AND_imm_R0, InstructionReg) then
+            ELSIF std_match(AND_imm_R0, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegASel  <= REG_ZEROTH_SEL;
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
+                SH2RegASel <= REG_ZEROTH_SEL;
+                SH2ALUImmediateOperand <= (23 DOWNTO 0 => '0') & InstructionReg(7 DOWNTO 0);
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM;
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;
+                SH2FCmd <= "1000";
+                SH2ALUCmd <= ALU_FB_SEL;
 
-            elsif std_match(TST_Rm_Rn, InstructionReg) then
+            ELSIF std_match(TST_Rm_Rn, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-                SH2RegA2Sel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegA1Sel         <= REG_SR;
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4)));
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
+                SH2RegA1Sel <= REG_SR;
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;
+                SH2FCmd <= "1000";
+                SH2ALUCmd <= ALU_FB_SEL;
 
-            elsif std_match(TST_imm_R0, InstructionReg) then
+            ELSIF std_match(TST_imm_R0, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegASel  <= REG_ZEROTH_SEL;
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
-                SH2RegA1Sel         <= REG_SR;
+                SH2RegASel <= REG_ZEROTH_SEL;
+                SH2ALUImmediateOperand <= (23 DOWNTO 0 => '0') & InstructionReg(7 DOWNTO 0);
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM;
+                SH2RegA1Sel <= REG_SR;
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "1000";
-                SH2ALUCmd                   <= ALU_FB_SEL;    
+                SH2FCmd <= "1000";
+                SH2ALUCmd <= ALU_FB_SEL;
 
-            elsif std_match(OR_Rm_Rn, InstructionReg) then
+            ELSIF std_match(OR_Rm_Rn, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-                SH2RegA2Sel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4)));
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "1110";
-                SH2ALUCmd                   <= ALU_FB_SEL;
+                SH2FCmd <= "1110";
+                SH2ALUCmd <= ALU_FB_SEL;
 
-            elsif std_match(OR_imm_R0, InstructionReg) then
+            ELSIF std_match(OR_imm_R0, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegASel  <= REG_ZEROTH_SEL;
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
+                SH2RegASel <= REG_ZEROTH_SEL;
+                SH2ALUImmediateOperand <= (23 DOWNTO 0 => '0') & InstructionReg(7 DOWNTO 0);
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM;
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "1110";
-                SH2ALUCmd                   <= ALU_FB_SEL;
-        
-            elsif std_match(XOR_Rm_Rn, InstructionReg) then
+                SH2FCmd <= "1110";
+                SH2ALUCmd <= ALU_FB_SEL;
+
+            ELSIF std_match(XOR_Rm_Rn, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(7 downto 4)));
-                SH2RegA2Sel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4)));
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "0110";
-                SH2ALUCmd                   <= ALU_FB_SEL;
+                SH2FCmd <= "0110";
+                SH2ALUCmd <= ALU_FB_SEL;
 
-            elsif std_match(XOR_imm_R0, InstructionReg) then
+            ELSIF std_match(XOR_imm_R0, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegASel  <= REG_ZEROTH_SEL;
-                SH2ALUImmediateOperand      <= (23 downto 0 => '0') & InstructionReg(7 downto 0);
-                SH2ALUUseImmediateOperand   <= ALU_USE_IMM;
+                SH2RegASel <= REG_ZEROTH_SEL;
+                SH2ALUImmediateOperand <= (23 DOWNTO 0 => '0') & InstructionReg(7 DOWNTO 0);
+                SH2ALUUseImmediateOperand <= ALU_USE_IMM;
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "0110";
-                SH2ALUCmd                   <= ALU_FB_SEL;       
-                
-            elsif std_match(NOT_Rm_Rn, InstructionReg) then
+                SH2FCmd <= "0110";
+                SH2ALUCmd <= ALU_FB_SEL;
+
+            ELSIF std_match(NOT_Rm_Rn, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegASel      <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
 
                 --Setting ALU control signals
-                SH2FCmd                     <= "0011";
-                SH2ALUCmd                   <= ALU_FB_SEL; 
-            
-            --  ==================================================================================================
-            -- MOV (Data Transfer)
-            --  ==================================================================================================
-            elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
+                SH2FCmd <= "0011";
+                SH2ALUCmd <= ALU_FB_SEL;
 
-                 -- Setting Reg Array control signals                                             
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access address inside register Rm (at index m)
-
-            elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
+                --  ==================================================================================================
+                -- MOV (Data Transfer)
+                --  ==================================================================================================
+            ELSIF std_match(MOVL_atRm_TO_Rn, InstructionReg) THEN
 
                 -- Setting Reg Array control signals                                             
-                SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access address inside register Rn (at index n)
-            
-                report "HoldRegA = x""" & to_hstring(RegArrayOutA) & """";
-                report "HoldRegA2 = x""" & to_hstring(RegArrayOutA2) & """";
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
 
-            --  ==================================================================================================
-            -- SYSTEM CONTROL
-            --  ==================================================================================================
-            elsif std_match(NOP, InstructionReg) then
+            ELSIF std_match(MOVL_Rm_TO_atRn, InstructionReg) THEN
+
+                -- Setting Reg Array control signals                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                REPORT "HoldRegA = x""" & to_hstring(RegArrayOutA) & """";
+                REPORT "HoldRegA2 = x""" & to_hstring(RegArrayOutA2) & """";
+
+                --  ==================================================================================================
+                -- SYSTEM CONTROL
+                --  ==================================================================================================
+            ELSIF std_match(NOP, InstructionReg) THEN
 
                 SetDefaultControlSignals;
 
-            elsif std_match(SETT, InstructionReg) then
+            ELSIF std_match(SETT, InstructionReg) THEN
+                SH2RegASel <= REG_SR;      --Summon the status register
+                --Setting ALU control signals
+                SH2FCmd <= "1100"; --Use OpA
+                SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
+            ELSIF std_match(LDC_Rm_SR, InstructionReg) THEN
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 0)));      --Summon the status register
+                --Setting ALU control signals
+                SH2FCmd <= "1100"; --Use OpA
+                SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
+            ELSIF std_match(STC_L_SR_Rn, InstructionReg) THEN
 
-            else
+            ELSIF std_match(STC_SR_Rn, InstructionReg) THEN
+                SH2RegASel <= REG_SR;      --Summon the status register
+                --Setting ALU control signals
+                SH2FCmd <= "1100"; --Use OpA
+                SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
+            ELSIF std_match(TRAPA_imm, InstructionReg) THEN
+
+
+            END IF;
                 -- report "Warning: The following instruction register did not match any known instructions: Value = x""" & to_hstring(InstructionReg) & """";
 
                 SetDefaultControlSignals;
-                
-            end if;
-
-        end if;
-    end process matchInstruction;
-
-
-    executeInstruction : process(SH2Clock)
-            -- Set default instruction-specific control signals
+        END IF;
+    END PROCESS matchInstruction;
+    executeInstruction : PROCESS (SH2Clock)
+        -- Set default instruction-specific control signals
         -- Does not include PMAU and address/data bus setting logic, because that is determined
         -- by the state machine
 
-        variable FlagUpdate    : std_logic_vector(regLen-1 downto 0) := (others => '0');
+        VARIABLE FlagUpdate : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+        
+        VARIABLE SignExtBus : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
 
-        procedure SetDefaultExecuteSignals is
-        begin
+        PROCEDURE SetDefaultExecuteSignals IS
+        BEGIN
             -- Default RegArray inputs: Do not input any registers, 
-            SH2RegIn <= REG_LEN_ZEROES; 
-            SH2RegInSel <= REG_ZEROTH_SEL; 
-            SH2RegStore <= REG_NO_STORE;   
-                                 
-            SH2RegAxIn  <= REG_LEN_ZEROES;
+            SH2RegIn <= REG_LEN_ZEROES;
+            SH2RegInSel <= REG_ZEROTH_SEL;
+            SH2RegStore <= REG_NO_STORE;
+
+            SH2RegAxIn <= REG_LEN_ZEROES;
             SH2RegAxInSel <= REG_ZEROTH_SEL;
-            SH2RegAxStore <= REG_NO_STORE; 
+            SH2RegAxStore <= REG_NO_STORE;
 
             WriteToMemoryL <= NO_WRITE_TO_MEMORY;
             ReadFromMemoryL <= NO_READ_FROM_MEMORY;
 
-        end procedure;
-    begin
-
-
-        if CurrentState = FETCH_IR and rising_edge(SH2Clock) then
+        END PROCEDURE;
+    BEGIN
+        IF CurrentState = FETCH_IR AND rising_edge(SH2Clock) THEN
 
             SetDefaultExecuteSignals;
 
             --  ==================================================================================================
             -- ARITHMETIC
             -- ==================================================================================================
-            if std_match(InstructionReg, ADD_imm_Rn) then
+            IF std_match(InstructionReg, ADD_imm_Rn) THEN
 
                 -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write 
-            
-            elsif std_match(InstructionReg, ADD_Rm_Rn) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write 
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write 
 
-            elsif std_match(InstructionReg, ADDC_Rm_Rn) then
+            ELSIF std_match(InstructionReg, ADD_Rm_Rn) THEN
                 -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write 
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write 
+
+            ELSIF std_match(InstructionReg, ADDC_Rm_Rn) THEN
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write 
 
                 FlagUpdate := RegArrayOutA1;
 
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_CARRYOUT);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
+                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value  
 
-            elsif std_match(InstructionReg, ADDV_Rm_Rn) then
+            ELSIF std_match(InstructionReg, ADDV_Rm_Rn) THEN
                 -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write 
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write 
 
                 FlagUpdate := RegArrayOutA1;
 
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_OVERFLOW);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                 --Actually write 
+                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_OVERFLOW); --Load into Status Register the new Carryout
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value                             
 
-            elsif std_match(InstructionReg, SUB_Rm_Rn) then
+            ELSIF std_match(InstructionReg, SUB_Rm_Rn) THEN
                 -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write 
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write 
 
-            elsif std_match(InstructionReg, SUBC_Rm_Rn) then
+            ELSIF std_match(InstructionReg, SUBC_Rm_Rn) THEN
                 -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write 
-                
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_CARRYOUT);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                         --Actually write 
-
-            elsif std_match(InstructionReg, SUBV_Rm_Rn) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write 
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write 
 
                 FlagUpdate := RegArrayOutA1;
 
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_OVERFLOW);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                            --Actually write 
+                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value                                    
 
-            elsif std_match(InstructionReg, NEG_Rm_Rn) then
+            ELSIF std_match(InstructionReg, SUBV_Rm_Rn) THEN
                 -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Update the value    
-                
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write 
 
-            elsif std_match(InstructionReg, NEGC_Rm_Rn) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Update the value
-                
                 FlagUpdate := RegArrayOutA1;
 
-                FlagUpdate(0) := not FlagBus(FLAG_INDEX_CARRYOUT);                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value   
+                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_OVERFLOW); --Load into Status Register the new Carryout
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value                                            
 
-            elsif std_match(InstructionReg, EXTU_B_Rm_Rn) then  
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;     
-        
-            elsif std_match(InstructionReg, EXTU_W_Rm_Rn) then  
-                
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;     
-
-            elsif std_match(InstructionReg, EXTS_B_Rm_Rn) then  
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;     
-        
-            elsif std_match(InstructionReg, EXTS_W_Rm_Rn) then  
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;     
-            
-            elsif std_match(InstructionReg, DT_Rn) then
-                if std_match(SH2ALUResult, ALU_ZERO_IMM) then
-                    SH2RegIn <= RegArrayOutA1(regLen - 1 downto 1) & '1';
-                    SH2RegInSel <= REG_SR;
-                    SH2RegStore <= REG_STORE;       
-                else
-                    SH2RegIn <= RegArrayOutA1(regLen - 1 downto 1) & '0';
-                    SH2RegInSel <= REG_SR;
-                    SH2RegStore <= REG_STORE;     
-                end if;
-            
-
-            --  ==================================================================================================
-            -- SHIFTS (0/8) : Needs testing
-            --  ==================================================================================================
-            elsif std_match(SHLL_Rn, InstructionReg) then
+            ELSIF std_match(InstructionReg, NEG_Rm_Rn) THEN
                 -- Setting Reg Array control signals
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
-                
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-
-            elsif std_match(SHLR_Rn, InstructionReg) then
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Update the value    
+            ELSIF std_match(InstructionReg, NEGC_Rm_Rn) THEN
                 -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Update the value
 
-                FlagUpdate := RegArrayOutA2;
+                FlagUpdate := RegArrayOutA1;
 
-                FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
-            
-            elsif std_match(SHAR_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
+                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value   
 
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
-
-            elsif std_match(SHAL_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
-        
-            elsif std_match(ROTCL_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-                
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value                                          --Update the value   
-
-            elsif std_match(ROTCR_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
-
-            elsif std_match(ROTL_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-               
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(regLen - 1);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value               
-            
-            elsif std_match(ROTR_Rn, InstructionReg) then
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;                                           --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));   --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;                                           --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) :=  RegArrayOutA(0);                         --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn  <= FlagUpdate;                                       --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR;                                            --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE;                                         --Update the value  
-            
-            --  ==================================================================================================
-            -- LOGICAL 0/9 Needs testing
-            --  ==================================================================================================
-            elsif std_match(AND_Rm_Rn, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn        <= SH2ALUResult;
-                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore     <= REG_STORE;
-            
-            elsif std_match(AND_imm_R0, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn    <= SH2ALUResult;
-                SH2RegInSel <= REG_ZEROTH_SEL;
+            ELSIF std_match(InstructionReg, EXTU_B_Rm_Rn) THEN
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;
-            
-            elsif std_match(TST_Rm_Rn, InstructionReg) then    
-                if std_match(SH2ALUResult, REG_LEN_ZEROES) then 
+
+            ELSIF std_match(InstructionReg, EXTU_W_Rm_Rn) THEN
+
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(InstructionReg, EXTS_B_Rm_Rn) THEN
+                SignExtBus := (regLen - 1 downto 8 => SH2ALUResult(7)) & SH2ALUResult(7 downto 0);
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(InstructionReg, EXTS_W_Rm_Rn) THEN
+                SignExtBus := (regLen - 1 downto 16 => SH2ALUResult(15)) & SH2ALUResult(15 downto 0);   
+                SH2RegIn <= SignExtBus; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(InstructionReg, DT_Rn) THEN
+                IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
+                    SH2RegIn <= RegArrayOutA1(regLen - 1 DOWNTO 1) & '1';
+                    SH2RegInSel <= REG_SR;
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    SH2RegIn <= RegArrayOutA1(regLen - 1 DOWNTO 1) & '0';
+                    SH2RegInSel <= REG_SR;
+                    SH2RegStore <= REG_STORE;
+                END IF;
+
+            ELSIF std_match(InstructionReg, CMP_EQ_imm_R0) THEN
+                IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
                     FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';                   --Load into Status Register the new Carryout
-                    SH2RegAxIn  <= FlagUpdate;              --Write back in Ax which is the Status Register 
-                    SH2RegAxInSel       <= REG_SR;
-                    SH2RegAxStore       <= REG_STORE;
-                end if;
+                    FlagUpdate(0) := '1';
 
-            elsif std_match(TST_imm_R0, InstructionReg) then
-                if std_match(SH2ALUResult, REG_LEN_ZEROES) then 
-                FlagUpdate := RegArrayOutA1;
-                FlagUpdate(0) := '1';                   --Load into Status Register the new Carryout
-                SH2RegAxIn  <= FlagUpdate;              --Write back in Ax which is the Status Register 
-                SH2RegAxInSel       <= REG_SR;
-                SH2RegAxStore       <= REG_STORE;
-                end if;
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '0';
 
-            elsif std_match(OR_Rm_Rn, InstructionReg) then
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                END IF;
+            ELSIF std_match(InstructionReg, CMP_EQ_Rm_Rn) THEN
+                IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '0';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                END IF;
+            ELSIF std_match(InstructionReg, CMP_GE_Rm_Rn) THEN
+                IF (std_match(SH2ALUResult, ALU_ZERO_IMM) OR (SH2ALUResult(regLen - 1) = '0')) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '0';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                END IF;
+            ELSIF std_match(InstructionReg, CMP_GT_Rm_Rn) THEN
+                IF ((SH2ALUResult(regLen - 1) = '0') AND (SH2ALUResult /= ALU_ZERO_IMM)) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '0';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                END IF;
+            ELSIF std_match(InstructionReg, CMP_HI_Rm_Rn) THEN
+                IF ((NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1') AND (SH2ALUResult /= ALU_ZERO_IMM)) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '0';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                END IF;
+            ELSIF std_match(InstructionReg, CMP_HS_Rm_Rn) THEN
+                IF (std_match(SH2ALUResult, ALU_ZERO_IMM) OR (NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1')) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '0';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                END IF;
+            ELSIF std_match(InstructionReg, CMP_PL_Rn) THEN
+                IF ((NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1') AND (SH2ALUResult /= ALU_ZERO_IMM)) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '0';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                END IF;
+            ELSIF std_match(InstructionReg, CMP_PZ_Rn) THEN
+                IF (std_match(SH2ALUResult, ALU_ZERO_IMM) OR (NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1')) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '0';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                END IF;
+            ELSIF std_match(InstructionReg, CMP_STR_Rm_Rn) THEN
+                IF (std_match(SH2ALUResult(7 DOWNTO 0), ALU_ZERO_IMM(7 DOWNTO 0)) OR
+                    std_match(SH2ALUResult(15 DOWNTO 8), ALU_ZERO_IMM(7 DOWNTO 0)) OR
+                    std_match(SH2ALUResult(23 DOWNTO 16), ALU_ZERO_IMM(7 DOWNTO 0)) OR
+                    std_match(SH2ALUResult(regLen - 1 DOWNTO 24), ALU_ZERO_IMM(7 DOWNTO 0))) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                ELSE
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '0';
+
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+                END IF;
+                --  ==================================================================================================
+                -- SHIFTS (0/8) : Needs testing
+                --  ==================================================================================================
+            ELSIF std_match(SHLL_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                FlagUpdate := RegArrayOutA2;
+
+                FlagUpdate(0) := FlagBus(FLAG_INDEX_CARRYOUT); --Update the T-bit with the high bit value of Rn  
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value  
+
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write
+
+            ELSIF std_match(SHLR_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write
+
+                FlagUpdate := RegArrayOutA2;
+
+                FlagUpdate(0) := FlagBus(FLAG_INDEX_CARRYOUT); --Update the T-bit with the high bit value of Rn  
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value  
+
+            ELSIF std_match(SHAR_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write
+
+                FlagUpdate := RegArrayOutA2;
+
+                FlagUpdate(0) := FlagBus(FLAG_INDEX_CARRYOUT); --Update the T-bit with the high bit value of Rn  
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value  
+
+            ELSIF std_match(SHAL_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write
+
+                FlagUpdate := RegArrayOutA2;
+
+                FlagUpdate(0) := FlagBus(FLAG_INDEX_CARRYOUT); --Update the T-bit with the high bit value of Rn  
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value  
+
+            ELSIF std_match(ROTCL_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write
+
+                FlagUpdate := RegArrayOutA2;
+
+                FlagUpdate(0) := FlagBus(FLAG_INDEX_CARRYOUT); --Update the T-bit with the high bit value of Rn  
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value                                          --Update the value   
+
+            ELSIF std_match(ROTCR_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write
+
+                FlagUpdate := RegArrayOutA2;
+
+                FlagUpdate(0) := FlagBus(FLAG_INDEX_CARRYOUT); --Update the T-bit with the high bit value of Rn  
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value  
+
+            ELSIF std_match(ROTL_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write
+
+                FlagUpdate := RegArrayOutA2;
+
+                FlagUpdate(0) := FlagBus(FLAG_INDEX_CARRYOUT); --Update the T-bit with the high bit value of Rn  
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value               
+
+            ELSIF std_match(ROTR_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                SH2RegStore <= REG_STORE; --Actually write
+
+                FlagUpdate := RegArrayOutA2;
+
+                FlagUpdate(0) := FlagBus(FLAG_INDEX_CARRYOUT); --Update the T-bit with the high bit value of Rn  
+                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                SH2RegAxStore <= REG_STORE; --Update the value  
+
+                --  ==================================================================================================
+                -- LOGICAL 0/9 Needs testing
+                --  ==================================================================================================
+            ELSIF std_match(AND_Rm_Rn, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegIn        <= SH2ALUResult;
-                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore     <= REG_STORE;
+                SH2RegIn <= SH2ALUResult;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
+                SH2RegStore <= REG_STORE;
 
-            elsif std_match(OR_imm_R0, InstructionReg) then
+            ELSIF std_match(AND_imm_R0, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegIn    <= SH2ALUResult;
+                SH2RegIn <= SH2ALUResult;
                 SH2RegInSel <= REG_ZEROTH_SEL;
                 SH2RegStore <= REG_STORE;
 
-            elsif std_match(XOR_Rm_Rn, InstructionReg) then
-                --Setting Reg Array control signals
-                SH2RegIn        <= SH2ALUResult;
-                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore     <= REG_STORE;
+            ELSIF std_match(TST_Rm_Rn, InstructionReg) THEN
+                IF std_match(SH2ALUResult, REG_LEN_ZEROES) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1'; --Load into Status Register the new Carryout
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register 
+                    SH2RegAxInSel <= REG_SR;
+                    SH2RegAxStore <= REG_STORE;
+                END IF;
 
-            elsif std_match(XOR_imm_R0, InstructionReg) then
+            ELSIF std_match(TST_imm_R0, InstructionReg) THEN
+                IF std_match(SH2ALUResult, REG_LEN_ZEROES) THEN
+                    FlagUpdate := RegArrayOutA1;
+                    FlagUpdate(0) := '1'; --Load into Status Register the new Carryout
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register 
+                    SH2RegAxInSel <= REG_SR;
+                    SH2RegAxStore <= REG_STORE;
+                END IF;
+
+            ELSIF std_match(OR_Rm_Rn, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegIn    <= SH2ALUResult;
+                SH2RegIn <= SH2ALUResult;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(OR_imm_R0, InstructionReg) THEN
+                --Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult;
                 SH2RegInSel <= REG_ZEROTH_SEL;
                 SH2RegStore <= REG_STORE;
-           
-            elsif std_match(NOT_Rm_Rn, InstructionReg) then
+
+            ELSIF std_match(XOR_Rm_Rn, InstructionReg) THEN
                 --Setting Reg Array control signals
-                SH2RegIn        <= SH2ALUResult;
-                SH2RegInSel     <= to_integer(unsigned(InstructionReg(11 downto 8)));
-                SH2RegStore     <= REG_STORE;
+                SH2RegIn <= SH2ALUResult;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
+                SH2RegStore <= REG_STORE;
 
-            --  ==================================================================================================
-            -- MOV
-            --  ==================================================================================================
+            ELSIF std_match(XOR_imm_R0, InstructionReg) THEN
+                --Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult;
+                SH2RegInSel <= REG_ZEROTH_SEL;
+                SH2RegStore <= REG_STORE;
 
-            elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
+            ELSIF std_match(NOT_Rm_Rn, InstructionReg) THEN
+                --Setting Reg Array control signals
+                SH2RegIn <= SH2ALUResult;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
+                SH2RegStore <= REG_STORE;
+
+                --  ==================================================================================================
+                -- MOV
+                --  ==================================================================================================
+
+            ELSIF std_match(MOVL_atRm_TO_Rn, InstructionReg) THEN
 
                 SH2RegIn <= SH2DataBus;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Access value inside register Rn (at index n)
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access value inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
-                
+
                 ReadFromMemoryL <= READ_FROM_MEMORY;
 
-            elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
+            ELSIF std_match(MOVL_Rm_TO_atRn, InstructionReg) THEN
                 WriteToMemoryL <= WRITE_TO_MEMORY;
+
             
-            end if;
+            ELSIF std_match(MOV_Rm_Rn, InstructionReg) THEN
 
-        end if;
-    end process executeInstruction;
+            ELSIF std_match(MOVT_Rn, InstructionReg) THEN
 
+            ELSIF std_match(SWAP_B_Rm_Rn, InstructionReg) THEN
+            
+            ELSIF std_match(SWAP_W_Rm_Rn, InstructionReg) THEN
+                
+            ELSIF std_match(XTRACT_Rm_Rn, InstructionReg) THEN
+            
 
+            ELSIF std_match(SETT, InstructionReg) THEN
+                FlagUpdate := SH2ALUResult;
+                FlagUpdate(0) := '1';
+                SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                SH2RegInSel <= REG_SR; --Write back to the status register
+                SH2RegStore <= REG_STORE; --Actually write 
+
+            ELSIF std_match(LDC_Rm_SR, InstructionReg) THEN
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= REG_SR; --Write back to the status register
+                SH2RegStore <= REG_STORE; --Actually write 
+
+            ELSIF std_match(STC_L_SR_Rn, InstructionReg) THEN
+
+            ELSIF std_match(STC_SR_Rn, InstructionReg) THEN
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 0))); --Write back to the Rn
+                SH2RegStore <= REG_STORE; --Actually write 
+
+            ELSIF std_match(TRAPA_imm, InstructionReg) THEN
+            END IF;
+        END IF;
+    END PROCESS executeInstruction;
     -- Set buses (This is combinational, outside of any clocked process.)
-    SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
-        HoldRegA when SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT else
-        SH2ALUResult when SH2SelDataBus = SET_DATA_BUS_TO_ALU_OUT else
-            (others => 'Z');
+    SH2DataBus <= SH2DataBus WHEN SH2SelDataBus = HOLD_DATA_BUS ELSE
+        HoldRegA WHEN SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT ELSE
+        SH2ALUResult WHEN SH2SelDataBus = SET_DATA_BUS_TO_ALU_OUT ELSE
+        (OTHERS => 'Z');
 
-    SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
-        SH2CalculatedDataAddress when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
-    std_logic_vector(to_unsigned(4 * to_integer(unsigned(SH2PC)), SH2AddressBus'length)) when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
-    HoldRegA2 when SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT else
-            (others => 'Z');
-
-
+    SH2AddressBus <= SH2AddressBus WHEN SH2SelAddressBus = HOLD_ADDRESS_BUS ELSE
+        SH2CalculatedDataAddress WHEN SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT ELSE
+        STD_LOGIC_VECTOR(to_unsigned(4 * to_integer(unsigned(SH2PC)), SH2AddressBus'length)) WHEN SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT ELSE
+        HoldRegA2 WHEN SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT ELSE
+        (OTHERS => 'Z');
     -- Make instruction reg combinational so that it updates immediately
-    InstructionReg <= SH2DataBus(instrLen-1 downto 0) 
-                    when SH2Clock = '1'
-                    else InstructionReg;
-
-
-end Structural;
+    InstructionReg <= SH2DataBus(instrLen - 1 DOWNTO 0)
+        WHEN SH2Clock = '1'
+        ELSE
+        InstructionReg;
+END Structural;
