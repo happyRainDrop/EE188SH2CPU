@@ -55,7 +55,7 @@ PACKAGE SH2_CPU_Constants IS
 
     -- Register and word size configuration
     CONSTANT regLen : INTEGER := 32; -- Each register is 32 bits
-    CONSTANT regCount : INTEGER := 18; -- 16 general + 2 special registers (PR, SR)
+    CONSTANT regCount : INTEGER := 20; -- 16 general + 4 special registers (PR, SR, GBR, VBR)
 
     -- DMAU configuration
     CONSTANT dmauSourceCount : INTEGER := 4; -- from reg array, GBR, VBR, or immediate
@@ -1480,27 +1480,38 @@ BEGIN
                 ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
 
                 -- Load from dis * (1,2,4) + GBR (into R0)
-                --------------------------------------------------------------------------- TODO: Pop GBR out as its own reg
+
             ELSIF std_match(MOV_B_R0_GBR, InstructionReg) THEN
 
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= REG_GBR; -- Access GBR (expected to come out on Reg A1)
+
                 -- Have DMAU sum the addresses from the registers
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
 
                 ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
 
             ELSIF std_match(MOV_W_R0_GBR, InstructionReg) THEN
+
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= REG_GBR; -- Access GBR (expected to come out on Reg A1)
+
                 -- Have DMAU sum the addresses from the registers
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
 
                 ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
 
             ELSIF std_match(MOV_L_R0_GBR, InstructionReg) THEN
+
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= REG_GBR; -- Access GBR (expected to come out on Reg A1)
+                
                 -- Have DMAU sum the addresses from the registers
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
 
@@ -1620,8 +1631,8 @@ BEGIN
             ELSIF std_match(MOVB_R0_TO_atDispRn, InstructionReg) THEN
 
                 -- Setting Reg Array control signals                                             
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
-                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+                SH2RegA2Sel <= 0; -- Access value at register R0 (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rn (at index n)
 
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
@@ -1632,9 +1643,9 @@ BEGIN
 
             ELSIF std_match(MOVW_R0_TO_atDispRn, InstructionReg) THEN
 
-                -- Setting Reg Array control signals                                             
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
-                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+                 -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= 0; -- Access value at register R0 (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rn (at index n)
 
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
@@ -1656,30 +1667,39 @@ BEGIN
 
                 WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
 
-                -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR) 
-                ----------------------------------------------------------------------------------- TODO: Move GBR back into RegArray
+                -- Store value in R0 to ((RAM address in GBR) + (1,2,4)*GBR) 
             ELSIF std_match(MOV_B_GBR_R0, InstructionReg) THEN
 
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= 0; -- Access value at register R0
+                SH2RegASel <= REG_GBR; -- Access address inside GBR
+
                 -- Have DMAU sum the immediate and GBR address
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
 
                 WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
 
             ELSIF std_match(MOV_W_GBR_R0, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= 0; -- Access value at register R0
+                SH2RegASel <= REG_GBR; -- Access address inside GBR
 
                 -- Have DMAU sum the immediate and GBR address
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
 
                 WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
 
             ELSIF std_match(MOV_L_GBR_R0, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= 0; -- Access value at register R0
+                SH2RegASel <= REG_GBR; -- Access address inside GBR
 
                 -- Have DMAU sum the immediate and GBR address
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
 
