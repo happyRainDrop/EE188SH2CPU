@@ -477,7 +477,9 @@ ARCHITECTURE Structural OF CPUtoplevel IS
     SIGNAL PrevIR : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0) := (OTHERS => 'Z'); -- IR
     SIGNAL ClockCounter : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); -- what clock cycle are we on?
 
-    SIGNAL SignExtend : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0);
+    SIGNAL MultiClockReg : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the multiclock instruction that is executed
+    SIGNAL ClockTwo : STD_LOGIC; --Clock cycle for multiclock instructions
+    SIGNAL DummyPC : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the new PC value to load
 
 BEGIN
 
@@ -589,6 +591,16 @@ BEGIN
             RE3 <= '1';
         END PROCEDURE;
 
+        PROCEDURE loadImmediate is
+        begin
+                PMAUImmediateSource <= DummyPc; --Assign the immediate address from register
+                PMAUImmediateOffset <= DMAU_ZERO_IMM;
+                SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
+                SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_IMM_OFFSET_x1;
+                SH2PMAUSrcSel <= PMAU_SRC_SEL_IMM; --Select the immediate address from register
+                SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
+        END PROCEDURE;
+
     BEGIN
 
         -- Rising edge: Update state, load PC, load IR
@@ -633,13 +645,19 @@ BEGIN
                         -- For the next state: Set data, address buses to high impedance so that test bench can write them
                         SH2SelAddressBus <= OPEN_ADDRESS_BUS;
                         SH2SelDataBus <= HOLD_DATA_BUS;
-
+                    
                     ELSE
                         CurrentState <= FETCH_IR;
 
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_PMAU_OUT; -- Open data bus for next read-in of codespace
                         SH2SelDataBus <= OPEN_DATA_BUS;
 
+                    END IF;
+
+                    IF (ClockTwo = '1') THEN
+                        loadImmediate;
+                    ELSE
+                        
                     END IF;
 
                 WHEN OTHERS => -- End of File or invalid state
@@ -1677,12 +1695,21 @@ BEGIN
                 --Setting ALU control signals
                 SH2FCmd <= "1100"; --Use OpA
                 SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
-
-            ELSE
-                -- report "Warning: The following instruction register did not match any known instructions: Value = x""" & to_hstring(InstructionReg) & """";
+            
+            ELSIF std_match(JMP_Rm, InstructionReg) THEN
+                ClockTwo <= '1';    --Set up for the second clock
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Load the immediate address from register
+                DummyPc <= RegArrayOutA; --Store the register
+            ELSE    
 
                 SetDefaultControlSignals;
 
+            END IF;
+
+            IF (ClockTwo = '1') THEN
+                IF std_match(JMP_Rm, MultiClockReg) THEN
+                    ClockTwo <= '0'; --Reset the second clock
+                END IF;
             END IF;
 
         END IF;
@@ -1749,7 +1776,6 @@ BEGIN
             -- ARITHMETIC
             -- ==================================================================================================
             IF std_match(InstructionReg, ADD_imm_Rn) THEN
-
                 -- Setting Reg Array control signals
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
