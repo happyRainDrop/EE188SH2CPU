@@ -591,8 +591,6 @@ begin
             RE0 <= '1'; RE1 <= '1'; RE2 <= '1'; RE3 <= '1';
         end procedure;
 
-        variable addressIndex : integer range 3 downto 0 := 0;
-
     begin
 
         -- Rising edge: Update state, load PC, load IR
@@ -667,9 +665,6 @@ begin
 
             disableReadWrite;
 
-            -- Calculate for byte/word reads and writes (Only ever uses the DMAU output address)
-            addressIndex := to_integer(unsigned(HoldCalculatedDataAddress(1 downto 0))); 
-
             -- Update select address and data bus signals
             case CurrentState is
                 when ZERO_CLK =>
@@ -683,7 +678,7 @@ begin
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
                         SH2SelDataBus <= SET_DATA_BUS_TO_REG_A2_OUT; 
                         
-                        case addressIndex is
+                        case DMAUAddressIndex is
                             when 0 =>
                                 WE3 <= '0'; WE2 <= '1'; WE1 <= '1'; WE0 <= '1';
                             when 1 =>
@@ -700,7 +695,7 @@ begin
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
                         SH2SelDataBus <= SET_DATA_BUS_TO_REG_A2_OUT;
 
-                        case addressIndex is
+                        case DMAUAddressIndex is
                             when 0 =>
                                 WE3 <= '0'; WE2 <= '0'; WE1 <= '1'; WE0 <= '1';
                             when 1 =>
@@ -725,7 +720,7 @@ begin
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
                         SH2SelDataBus <= OPEN_DATA_BUS;
 
-                        case addressIndex is
+                        case DMAUAddressIndex is
                             when 0 =>
                                 RE3 <= '0'; RE2 <= '1'; RE1 <= '1'; RE0 <= '1';
                             when 1 =>
@@ -742,7 +737,7 @@ begin
                         SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
                         SH2SelDataBus <= OPEN_DATA_BUS;
 
-                        case addressIndex is
+                        case DMAUAddressIndex is
                             when 0 =>
                                 RE3 <= '0'; RE2 <= '0'; RE1 <= '1'; RE0 <= '1';
                             when 1 =>
@@ -1355,6 +1350,8 @@ begin
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
 
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
             elsif std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) then
                 -- Setting Reg Array control signals                                             
                 SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
@@ -1365,6 +1362,8 @@ begin
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
 
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
+
             elsif std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) then
                 -- Setting Reg Array control signals                                             
                 SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
@@ -1374,6 +1373,8 @@ begin
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
 
             -- Store value in Rm to (pre decremented RAM address in Rn)
             elsif std_match(MOVB_Rm_TO_atPreDecRn, InstructionReg) then
@@ -1386,6 +1387,8 @@ begin
                 SH2DMAUIncDecSel <= MAU_DEC_SEL;
                 SH2DMAUPrePostSel <= MAU_PRE_SEL;
 
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
             elsif std_match(MOVW_Rm_TO_atPreDecRn, InstructionReg) then
                 -- Setting Reg Array control signals                                             
                 SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
@@ -1396,6 +1399,8 @@ begin
                 SH2DMAUIncDecSel <= MAU_DEC_SEL;
                 SH2DMAUPrePostSel <= MAU_PRE_SEL;
 
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
+
             elsif std_match(MOVL_Rm_TO_atPreDecRn, InstructionReg) then
                 -- Setting Reg Array control signals                                             
                 SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
@@ -1405,6 +1410,8 @@ begin
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 SH2DMAUIncDecSel <= MAU_DEC_SEL;
                 SH2DMAUPrePostSel <= MAU_PRE_SEL;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
 
             -- Store value in Rm to ((RAM address in Rn) + (1,2,4)*disp)
             elsif std_match(MOVB_R0_TO_atDispRn, InstructionReg) then
@@ -1418,6 +1425,8 @@ begin
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
 
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
             elsif std_match(MOVW_R0_TO_atDispRn, InstructionReg) then
 
                 -- Setting Reg Array control signals                                             
@@ -1428,6 +1437,8 @@ begin
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
+
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
 
             elsif std_match(MOVL_Rm_TO_atDispRn, InstructionReg) then
 
@@ -1440,6 +1451,8 @@ begin
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
 
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
+
             -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR) 
             ----------------------------------------------------------------------------------- TODO: Move GBR back into RegArray
             elsif std_match(MOV_B_GBR_R0, InstructionReg) then
@@ -1449,6 +1462,8 @@ begin
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
 
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
             elsif std_match(MOV_W_GBR_R0, InstructionReg) then
 
                 -- Have DMAU sum the immediate and GBR address
@@ -1456,12 +1471,16 @@ begin
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
 
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
+
             elsif std_match(MOV_L_GBR_R0, InstructionReg) then
 
                 -- Have DMAU sum the immediate and GBR address
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
                 DMAUImmediateOffset <= std_logic_vector(resize(signed(InstructionReg(3 downto 0)), regLen)); -- sign-extended immediate
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
 
             --  ==================================================================================================
             -- SYSTEM CONTROL
