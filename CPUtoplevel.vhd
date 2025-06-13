@@ -40,7 +40,8 @@
 --                                  Made intermediate variables for MOV reg outputs.
 --     11 June 25 Ruth Berkun       Update addressbus to reflect 4*PC value (Each longword is 4 apart in memory address now) 
 --     11 June 25 Nerissa Finnen    Updated all Shift commands to new style
---     11-12 June 25 Nerisa Finnen  Implemented all one-clock ALU instructions, starting the System Control 
+--     11-12 June 25 Nerisa Finnen  Implemented all one-clock ALU instructions, starting the System Control
+--     12 June 25 Ruth Berkun       Implementing MOV commands (load and store)
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -117,7 +118,7 @@ PACKAGE SH2_CPU_Constants IS
     CONSTANT NUM_ADDRESS_BUS_OPTIONS : INTEGER := 4; -- DMAU, PMAU, regs, hold, open
     CONSTANT OPEN_DATA_BUS : INTEGER := 0;
     CONSTANT HOLD_DATA_BUS : INTEGER := 1;
-    CONSTANT SET_DATA_BUS_TO_REG_A_OUT : INTEGER := 2;
+    CONSTANT SET_DATA_BUS_TO_REG_A2_OUT : INTEGER := 2;
     CONSTANT SET_DATA_BUS_TO_ALU_OUT : INTEGER := 3;
     CONSTANT OPEN_ADDRESS_BUS : INTEGER := 0;
     CONSTANT HOLD_ADDRESS_BUS : INTEGER := 1;
@@ -129,12 +130,13 @@ PACKAGE SH2_CPU_Constants IS
     -- is held at current value by decrementing by 1 and adding 1 as offset
     CONSTANT PMAU_HOLD : STD_LOGIC := '0'; --Holds the PC value in the PMAU
     CONSTANT PMAU_NO_HOLD : STD_LOGIC := '1'; --Does not hold the PC value in the PMAU
-    CONSTANT DEFAULT_SRC_SEL : INTEGER := 0; --May change due to PC/GBR location moving
+    CONSTANT DMAU_ZERO_IMM : STD_LOGIC_VECTOR(31 DOWNTO 0) := (OTHERS => '0');
     CONSTANT DEFAULT_DEC_SEL : STD_LOGIC := MAU_DEC_SEL; --Select decrement
     CONSTANT DEFAULT_BIT : INTEGER := 0; --Only 0th bit to modify
-    CONSTANT DEFAULT_POST_SEL : STD_LOGIC := MAU_POST_SEL; --Post decrement and preserve the initial value
+    CONSTANT DEFAULT_POST_SEL : STD_LOGIC := MAU_POST_SEL; --Post decrement so nothing is modified!
     CONSTANT DEFAULT_OFFSET_SEL : INTEGER := 4; --Select immediate offset multiplied by 1
     CONSTANT DEFAULT_OFFSET_VAL : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000000000001"; --Set the offset to be 1
+    CONSTANT MAU_ZERO_OFFSET : STD_LOGIC_VECTOR(31 DOWNTO 0) := (OTHERS => '0');
 
     -- Incrementing in PMAU
     CONSTANT DEFAULT_PRE_SEL : STD_LOGIC := '1';
@@ -250,35 +252,38 @@ PACKAGE SH2_IR_Constants IS
     CONSTANT MOV_W_PC_DISP_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "1001------------"; -- MOV.W @(disp,PC), Rn
     CONSTANT MOV_L_PC_DISP_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "1101------------"; -- MOV.L @(disp,PC), Rn
     CONSTANT MOV_Rm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0011"; -- MOV Rm, Rn
-    CONSTANT MOVB_Rm_TO_atRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0000"; -- MOV.B Rm, @Rn
-    CONSTANT MOVW_Rm_TO_atRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0001"; -- MOV.W Rm, @Rn
-    CONSTANT MOVL_Rm_TO_atRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0010"; -- MOV.L Rm, @Rn
+    CONSTANT MOVA_PC_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000111--------";           -- MOVA @(disp,PC),R0
+    CONSTANT MOVT_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000----00101001";              -- MOVT Rn
     CONSTANT MOVB_atRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0000"; -- MOV.B @Rm, Rn
     CONSTANT MOVW_atRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0001"; -- MOV.W @Rm, Rn
     CONSTANT MOVL_atRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0010"; -- MOV.L @Rm, Rn
-    CONSTANT MOVB_Rm_TO_atPreDecRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0100"; -- MOV.B Rm, @–Rn
-    CONSTANT MOVW_Rm_TO_atPreDecRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0101"; -- MOV.W Rm, @–Rn
-    CONSTANT MOVL_Rm_TO_atPreDecRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0110"; -- MOV.L Rm, @–Rn
+    CONSTANT MOVB_atR0Rm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------1100"; -- MOV.B @(R0,Rm),Rn
+    CONSTANT MOVW_atR0Rm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------1101"; -- MOV.W @(R0,Rm),Rn  
+    CONSTANT MOVL_atR0Rm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------1110";    -- MOV.L @(R0,Rm),Rn
     CONSTANT MOVB_atPostIncRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0100"; -- MOV.B @Rm+, Rn
     CONSTANT MOVW_atPostIncRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0101"; -- MOV.W @Rm+, Rn
     CONSTANT MOVL_atPostIncRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------0110"; -- MOV.L @Rm+, Rn
-    CONSTANT MOVB_R0_TO_atDispRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000000--------"; -- MOV.B R0, @(disp,Rn)
-    CONSTANT MOVW_R0_TO_atDispRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000001--------"; -- MOV.W R0, @(disp,Rn)
-    CONSTANT MOVL_Rm_TO_atDispRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0001------------"; -- MOV.L Rm, @(disp,Rn)
     CONSTANT MOVB_atDispRm_TO_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000100--------"; -- MOV.B @(disp,Rm), R0
     CONSTANT MOVW_atDispRm_TO_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000101--------"; -- MOV.W @(disp,Rm), R0
     CONSTANT MOVL_atDispRm_TO_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0101------------"; -- MOV.L @(disp,Rm), Rn
+    CONSTANT MOV_B_R0_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000100--------";         -- MOV.B @(disp,GBR), R0
+    CONSTANT MOV_W_R0_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000101--------";         -- MOV.W @(disp,GBR), R0
+    CONSTANT MOV_L_R0_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000110--------";         -- MOV.L @(disp,GBR), R0
+    CONSTANT MOVB_Rm_TO_atRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0000"; -- MOV.B Rm, @Rn
+    CONSTANT MOVW_Rm_TO_atRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0001"; -- MOV.W Rm, @Rn
+    CONSTANT MOVL_Rm_TO_atRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0010"; -- MOV.L Rm, @Rn
     CONSTANT MOVB_Rm_TO_atR0Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------0100"; -- MOV.B Rm, @(R0,Rn)
     CONSTANT MOVW_Rm_TO_atR0Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------0101"; -- MOV.W Rm, @(R0,Rn)  
-    CONSTANT MOV_L_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------0110";
-    CONSTANT MOV_B_GBR_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000000--------";
-    CONSTANT MOV_W_GBR_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000001--------";
-    CONSTANT MOV_L_GBR_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000010--------";
-    CONSTANT MOV_B_R0_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000100--------";
-    CONSTANT MOV_W_R0_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000101--------";
-    CONSTANT MOV_L_R0_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000110--------";
-    CONSTANT MOVA_PC_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000111--------";
-    CONSTANT MOVT_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000----00101001";
+    CONSTANT MOVL_Rm_TO_atR0Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0000--------0110";    -- MOV.L Rm, @(R0,Rn)
+    CONSTANT MOVB_Rm_TO_atPreDecRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0100"; -- MOV.B Rm, @–Rn
+    CONSTANT MOVW_Rm_TO_atPreDecRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0101"; -- MOV.W Rm, @–Rn
+    CONSTANT MOVL_Rm_TO_atPreDecRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------0110"; -- MOV.L Rm, @–Rn
+    CONSTANT MOVB_R0_TO_atDispRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000000--------"; -- MOV.B R0, @(disp,Rn)
+    CONSTANT MOVW_R0_TO_atDispRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "10000001--------"; -- MOV.W R0, @(disp,Rn)
+    CONSTANT MOVL_Rm_TO_atDispRn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0001------------"; -- MOV.L Rm, @(disp,Rn)
+    CONSTANT MOV_B_GBR_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000000--------"; -- MOV.B R0, @(disp,GBR)
+    CONSTANT MOV_W_GBR_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000001--------"; -- MOV.W R0, @(disp,GBR)
+    CONSTANT MOV_L_GBR_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000010--------"; -- MOV.L R0, @(disp,GBR)
     --constant MUL_L_Rm_Rn : std_logic_vector(15 downto 0) := "0000--------0111";
     --constant MULS_W_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1111";
     --constant MULU_W_Rm_Rn : std_logic_vector(15 downto 0) := "0010--------1110";
@@ -322,14 +327,14 @@ PACKAGE SH2_IR_Constants IS
     CONSTANT SUB_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------1000";
     CONSTANT SUBC_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------1010";
     CONSTANT SUBV_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0011--------1011";
-    CONSTANT SWAP_B_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1000";
-    CONSTANT SWAP_W_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1001";
+    CONSTANT SWAP_B_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1000"; -- SWAP.B Rm,Rn
+    CONSTANT SWAP_W_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0110--------1001"; -- SWAP.W Rm,Rn
     CONSTANT TAS_B_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0100----00011011";
     CONSTANT TRAPA_imm : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11000011--------";
     CONSTANT TST_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1000";
     CONSTANT TST_imm_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001000--------";
     CONSTANT TST_B_imm_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001100--------";
-    CONSTANT XTRCT_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1101";
+    CONSTANT XTRCT_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1101"; -- XTRCT Rm,Rn
     CONSTANT XOR_Rm_Rn : STD_LOGIC_VECTOR(15 DOWNTO 0) := "0010--------1010";
     CONSTANT XOR_imm_R0 : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001010--------";
     CONSTANT XOR_B_imm_GBR : STD_LOGIC_VECTOR(15 DOWNTO 0) := "11001110--------";
@@ -414,12 +419,18 @@ ARCHITECTURE Structural OF CPUtoplevel IS
     SIGNAL DMAUImmediateOffset : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
     -- DMAU OUTPUTS
     SIGNAL SH2CalculatedDataAddress : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- DMAU output address
-    SIGNAL SH2DataAddressSrc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- DMAU input address, updated
-    -- (Need control line to see which src)
+    SIGNAL HoldCalculatedDataAddress : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- save DMAU output address
+    -- for write on next clock
+    SIGNAL DMAUPostIncDecSrc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- DMAU input address, updated with inc/dec
+    SIGNAL DMAUAddressIndex : INTEGER RANGE 3 DOWNTO 0 := 0; -- if the DMAU output address is x0403, this would be 3, for example
 
     -- Read and Write flags that the PMAU sets
-    SIGNAL WriteToMemoryL : STD_LOGIC := NO_WRITE_TO_MEMORY; -- active high
-    SIGNAL ReadFromMemoryL : STD_LOGIC := NO_WRITE_TO_MEMORY; -- active high
+    SIGNAL WriteToMemoryB : STD_LOGIC := NO_WRITE_TO_MEMORY; -- active high
+    SIGNAL WriteToMemoryW : STD_LOGIC := NO_WRITE_TO_MEMORY;
+    SIGNAL WriteToMemoryL : STD_LOGIC := NO_WRITE_TO_MEMORY;
+    SIGNAL ReadFromMemoryB : STD_LOGIC := NO_WRITE_TO_MEMORY; -- active high
+    SIGNAL ReadFromMemoryW : STD_LOGIC := NO_WRITE_TO_MEMORY;
+    SIGNAL ReadFromMemoryL : STD_LOGIC := NO_WRITE_TO_MEMORY;
 
     -------------------------------------------------------------------------------------
     -- PMAU FROM CONTROL LINE INPUTS
@@ -523,7 +534,7 @@ BEGIN
             SH2DMAUIncDecBit => SH2DMAUIncDecBit,
             SH2DMAUPrePostSel => SH2DMAUPrePostSel,
             SH2DataAddressBus => SH2CalculatedDataAddress, -- just GBR?
-            SH2DataAddressSrc => SH2DataAddressSrc
+            SH2DataAddressSrc => DMAUPostIncDecSrc
         );
 
     -- Instantiate PMAU
@@ -549,7 +560,7 @@ BEGIN
         PROCEDURE holdPC IS
         BEGIN
             SH2PMAUHold <= PMAU_HOLD;
-            SH2PMAUSrcSel <= DEFAULT_SRC_SEL;
+            SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
             PMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
             SH2PMAUOffsetSel <= DEFAULT_OFFSET_SEL;
             SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
@@ -560,7 +571,7 @@ BEGIN
         PROCEDURE incPC IS
         BEGIN
             SH2PMAUHold <= PMAU_NO_HOLD;
-            SH2PMAUSrcSel <= DEFAULT_SRC_SEL;
+            SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
             SH2PMAUOffsetSel <= DEFAULT_NO_OFF_VAL;
             SH2PMAUIncDecSel <= DEFAULT_INC_SEL;
             SH2PMAUIncDecBit <= DEFAULT_BIT;
@@ -664,17 +675,139 @@ BEGIN
 
                 WHEN FETCH_IR =>
 
-                    IF (WriteToMemoryL = WRITE_TO_MEMORY) THEN
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
-                        SH2SelDataBus <= SET_DATA_BUS_TO_REG_A_OUT;
+                    -- Figure out which bits to write to RAM
+                    -- assume address, data bus correctly set in instruction matching
+                    IF (WriteToMemoryB = WRITE_TO_MEMORY) THEN
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
+                        SH2SelDataBus <= SET_DATA_BUS_TO_REG_A2_OUT;
+
+                        CASE DMAUAddressIndex IS
+                            WHEN 0 =>
+                                WE3 <= '0';
+                                WE2 <= '1';
+                                WE1 <= '1';
+                                WE0 <= '1';
+                            WHEN 1 =>
+                                WE3 <= '1';
+                                WE2 <= '0';
+                                WE1 <= '1';
+                                WE0 <= '1';
+                            WHEN 2 =>
+                                WE3 <= '1';
+                                WE2 <= '1';
+                                WE1 <= '0';
+                                WE0 <= '1';
+                            WHEN 3 =>
+                                WE3 <= '1';
+                                WE2 <= '1';
+                                WE1 <= '1';
+                                WE0 <= '0';
+                            WHEN OTHERS =>
+                                WE3 <= '1';
+                                WE2 <= '1';
+                                WE1 <= '1';
+                                WE0 <= '1';
+                        END CASE;
+
+                    ELSIF (WriteToMemoryW = WRITE_TO_MEMORY) THEN
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
+                        SH2SelDataBus <= SET_DATA_BUS_TO_REG_A2_OUT;
+
+                        CASE DMAUAddressIndex IS
+                            WHEN 0 =>
+                                WE3 <= '0';
+                                WE2 <= '0';
+                                WE1 <= '1';
+                                WE0 <= '1';
+                            WHEN 1 =>
+                                WE3 <= '1';
+                                WE2 <= '0';
+                                WE1 <= '0';
+                                WE0 <= '1';
+                            WHEN 2 =>
+                                WE3 <= '1';
+                                WE2 <= '1';
+                                WE1 <= '0';
+                                WE0 <= '0';
+                            WHEN OTHERS =>
+                                WE3 <= '1';
+                                WE2 <= '1';
+                                WE1 <= '1';
+                                WE0 <= '1';
+                        END CASE;
+                    ELSIF (WriteToMemoryL = WRITE_TO_MEMORY) THEN
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
+                        SH2SelDataBus <= SET_DATA_BUS_TO_REG_A2_OUT;
                         WE0 <= '0';
                         WE1 <= '0';
                         WE2 <= '0';
-                        WE3 <= '0'; -- assume address, data bus correctly set in instruction matching
+                        WE3 <= '0'; -- write the whole longword
+
                     END IF;
 
-                    IF (ReadFromMemoryL = READ_FROM_MEMORY) THEN
-                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_REG_A2_OUT;
+                    -- Figure out which bits to load from RAM
+                    -- assume address, data bus correctly set in instruction matching
+                    IF (ReadFromMemoryB = READ_FROM_MEMORY) THEN
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
+
+                        CASE DMAUAddressIndex IS
+                            WHEN 0 =>
+                                RE3 <= '0';
+                                RE2 <= '1';
+                                RE1 <= '1';
+                                RE0 <= '1';
+                            WHEN 1 =>
+                                RE3 <= '1';
+                                RE2 <= '0';
+                                RE1 <= '1';
+                                RE0 <= '1';
+                            WHEN 2 =>
+                                RE3 <= '1';
+                                RE2 <= '1';
+                                RE1 <= '0';
+                                RE0 <= '1';
+                            WHEN 3 =>
+                                RE3 <= '1';
+                                RE2 <= '1';
+                                RE1 <= '1';
+                                RE0 <= '0';
+                            WHEN OTHERS =>
+                                RE3 <= '1';
+                                RE2 <= '1';
+                                RE1 <= '1';
+                                RE0 <= '1';
+                        END CASE;
+
+                    ELSIF (ReadFromMemoryW = READ_FROM_MEMORY) THEN
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
+                        SH2SelDataBus <= OPEN_DATA_BUS;
+
+                        CASE DMAUAddressIndex IS
+                            WHEN 0 =>
+                                RE3 <= '0';
+                                RE2 <= '0';
+                                RE1 <= '1';
+                                RE0 <= '1';
+                            WHEN 1 =>
+                                RE3 <= '1';
+                                RE2 <= '0';
+                                RE1 <= '0';
+                                RE0 <= '1';
+                            WHEN 2 =>
+                                RE3 <= '1';
+                                RE2 <= '1';
+                                RE1 <= '0';
+                                RE0 <= '0';
+                            WHEN OTHERS =>
+                                RE3 <= '1';
+                                RE2 <= '1';
+                                RE1 <= '1';
+                                RE0 <= '1';
+                        END CASE;
+
+                    ELSIF (ReadFromMemoryL = READ_FROM_MEMORY) THEN
+                        SH2SelAddressBus <= SET_ADDRESS_BUS_TO_DMAU_OUT;
                         SH2SelDataBus <= OPEN_DATA_BUS;
                         RE0 <= '0';
                         RE1 <= '0';
@@ -721,13 +854,21 @@ BEGIN
             SH2ALUOpAImmediate <= DEFAULT_ALU_IMM_OP;
 
             -- Default DMAU inputs
-            SH2DMAUSrcSel <= DEFAULT_SRC_SEL;
+            SH2DMAUSrcSel <= DMAU_SRC_SEL_IMM;
             SH2DMAUOffsetSel <= DEFAULT_OFFSET_SEL;
             SH2DMAUIncDecSel <= DEFAULT_DEC_SEL;
             SH2DMAUIncDecBit <= DEFAULT_BIT;
             SH2DMAUPrePostSel <= DEFAULT_POST_SEL;
-            DMAUImmediateSource <= DEFAULT_OFFSET_VAL;
-            DMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
+            DMAUImmediateSource <= DMAU_ZERO_IMM;
+            DMAUImmediateOffset <= MAU_ZERO_OFFSET;
+
+            -- Reset reads and writes;
+            WriteToMemoryB <= NO_WRITE_TO_MEMORY;
+            WriteToMemoryW <= NO_WRITE_TO_MEMORY;
+            WriteToMemoryL <= NO_WRITE_TO_MEMORY;
+            ReadFromMemoryB <= NO_READ_FROM_MEMORY;
+            ReadFromMemoryW <= NO_READ_FROM_MEMORY;
+            ReadFromMemoryL <= NO_READ_FROM_MEMORY;
 
         END PROCEDURE;
 
@@ -737,15 +878,11 @@ BEGIN
             --Default all the units
             SetDefaultControlSignals;
 
-            -- Save the values of the registers for execute state, which is a clock after the instruction
-            HoldRegA <= RegArrayOutA;
-            HoldRegA2 <= RegArrayOutA2;
-            -- PrevIR <= InstructionReg;
-
             --  ==================================================================================================
             -- ARITHMETIC
             -- ==================================================================================================
             IF std_match(InstructionReg, ADD_imm_Rn) THEN
+              
                 -- Setting register ops for ALU
                 SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --OpA of ALU comes out of RegArray at Rn 
 
@@ -869,6 +1006,7 @@ BEGIN
                 SH2ALUCmd <= "01"; --Select the Adder Output
 
             ELSIF std_match(InstructionReg, EXTS_B_Rm_Rn) THEN
+
                 -- Setting register ops for ALU
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); --OpA of ALU comes out of RegArray at Rn 
 
@@ -1174,21 +1312,350 @@ BEGIN
                 SH2ALUCmd <= ALU_FB_SEL;
 
                 --  ==================================================================================================
-                -- MOV (Data Transfer)
+                -- LOAD
                 --  ==================================================================================================
-            ELSIF std_match(MOVL_atRm_TO_Rn, InstructionReg) THEN
+                -- Load immediate
+            ELSIF std_match(MOV_IMM_TO_Rn, InstructionReg) THEN
+                -- Nothing to precalculate here. We'll do the loading in the execute stage.
 
+                -- Load from reg address directly
+            ELSIF std_match(MOVB_atRm_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOVW_atRm_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOVL_atRm_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
+                -- Load from reg address + reg address in R0
+            ELSIF std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+                SH2RegBSel <= 0; -- Access offset inside R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
+
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+                SH2RegBSel <= 0; -- Access offset inside R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+                SH2RegBSel <= 0; -- Access offset inside R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
+                -- Load from reg address post-incremented
+            ELSIF std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
+
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
+                -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
+            ELSIF std_match(MOVB_atDispRm_TO_R0, InstructionReg) THEN
+
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
+
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOVW_atDispRm_TO_R0, InstructionReg) THEN
+
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOVL_atDispRm_TO_Rn, InstructionReg) THEN
+
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
+                -- Load from dis * (1,2,4) + GBR (into R0)
+                --------------------------------------------------------------------------- TODO: Pop GBR out as its own reg
+            ELSIF std_match(MOV_B_R0_GBR, InstructionReg) THEN
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
+
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOV_W_R0_GBR, InstructionReg) THEN
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOV_L_R0_GBR, InstructionReg) THEN
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
+                --  ==================================================================================================
+                -- STORE
+                --  ==================================================================================================
+
+                -- Store value in Rm to RAM address in Rn
+            ELSIF std_match(MOVB_Rm_TO_atRn, InstructionReg) THEN
                 -- Setting Reg Array control signals                                             
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rm (at index m)
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
+            ELSIF std_match(MOVW_Rm_TO_atRn, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
 
             ELSIF std_match(MOVL_Rm_TO_atRn, InstructionReg) THEN
 
                 -- Setting Reg Array control signals                                             
-                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
-                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
 
-                REPORT "HoldRegA = x""" & to_hstring(RegArrayOutA) & """";
-                REPORT "HoldRegA2 = x""" & to_hstring(RegArrayOutA2) & """";
+                -- Have DMAU take address directly from register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
+
+                -- Store value in Rm to (RAM address in Rn + RAM address in R0)
+            ELSIF std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+                SH2RegBSel <= 0; -- Access offset inside R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
+
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
+            ELSIF std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+                SH2RegBSel <= 0; -- Access offset inside R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
+
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
+
+            ELSIF std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+                SH2RegBSel <= 0; -- Access offset inside R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_REG_OFFSET_x1;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
+
+                -- Store value in Rm to (pre decremented RAM address in Rn)
+            ELSIF std_match(MOVB_Rm_TO_atPreDecRn, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU pre-decrement the address from the register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_DEC_SEL;
+                SH2DMAUPrePostSel <= MAU_PRE_SEL;
+
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
+            ELSIF std_match(MOVW_Rm_TO_atPreDecRn, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU pre-decrement the address from the register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_DEC_SEL;
+                SH2DMAUPrePostSel <= MAU_PRE_SEL;
+
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
+
+            ELSIF std_match(MOVL_Rm_TO_atPreDecRn, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU pre-decrement the address from the register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_DEC_SEL;
+                SH2DMAUPrePostSel <= MAU_PRE_SEL;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
+
+                -- Store value in Rm to ((RAM address in Rn) + (1,2,4)*disp)
+            ELSIF std_match(MOVB_R0_TO_atDispRn, InstructionReg) THEN
+
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
+
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
+            ELSIF std_match(MOVW_R0_TO_atDispRn, InstructionReg) THEN
+
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
+
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
+
+            ELSIF std_match(MOVL_Rm_TO_atDispRn, InstructionReg) THEN
+
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access value at register Rm (at index m)
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
+
+                -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR) 
+                ----------------------------------------------------------------------------------- TODO: Move GBR back into RegArray
+            ELSIF std_match(MOV_B_GBR_R0, InstructionReg) THEN
+
+                -- Have DMAU sum the immediate and GBR address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
+
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
+            ELSIF std_match(MOV_W_GBR_R0, InstructionReg) THEN
+
+                -- Have DMAU sum the immediate and GBR address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x2;
+
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
+
+            ELSIF std_match(MOV_L_GBR_R0, InstructionReg) THEN
+
+                -- Have DMAU sum the immediate and GBR address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_GBR;
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
 
                 --  ==================================================================================================
                 -- SYSTEM CONTROL
@@ -1229,7 +1696,6 @@ BEGIN
         -- by the state machine
 
         VARIABLE FlagUpdate : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
-        
         VARIABLE SignExtBus : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
 
         PROCEDURE SetDefaultExecuteSignals IS
@@ -1243,10 +1709,40 @@ BEGIN
             SH2RegAxInSel <= REG_ZEROTH_SEL;
             SH2RegAxStore <= REG_NO_STORE;
 
-            WriteToMemoryL <= NO_WRITE_TO_MEMORY;
-            ReadFromMemoryL <= NO_READ_FROM_MEMORY;
-
         END PROCEDURE;
+
+        -- Make sure SH2RegIn is taking the correct byte from the SH2DataBus
+        PROCEDURE ReadBSetSH2RegIn IS
+        BEGIN
+            CASE DMAUAddressIndex IS
+                WHEN 0 => -- Grab highest byte
+                    SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(SH2DataBus(31 DOWNTO 24)), regLen)); -- sign-extended data bus value
+                WHEN 1 => -- Grab second highest byte
+                    SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(SH2DataBus(23 DOWNTO 16)), regLen)); -- sign-extended data bus value
+                WHEN 2 => -- Grab second lowest byte
+                    SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(SH2DataBus(15 DOWNTO 8)), regLen)); -- sign-extended data bus value
+                WHEN 3 => -- Grab lowest byte
+                    SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(SH2DataBus(7 DOWNTO 0)), regLen)); -- sign-extended data bus value
+                WHEN OTHERS =>
+                    -- should never get here
+            END CASE;
+        END PROCEDURE;
+
+        -- Make sure SH2RegIn is taking the correct word from the SH2DataBus
+        PROCEDURE ReadWSetSH2RegIn IS
+        BEGIN
+            CASE DMAUAddressIndex IS
+                WHEN 0 => -- Grab highest word
+                    SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(SH2DataBus(31 DOWNTO 16)), regLen)); -- sign-extended data bus value
+                WHEN 1 => -- Grab middle word
+                    SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(SH2DataBus(23 DOWNTO 8)), regLen)); -- sign-extended data bus value
+                WHEN 2 => -- Grab lowest word
+                    SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(SH2DataBus(15 DOWNTO 0)), regLen)); -- sign-extended data bus value
+                WHEN OTHERS =>
+                    -- should never get here
+            END CASE;
+        END PROCEDURE;
+
     BEGIN
         IF CurrentState = FETCH_IR AND rising_edge(SH2Clock) THEN
 
@@ -1292,7 +1788,8 @@ BEGIN
                 FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_OVERFLOW); --Load into Status Register the new Carryout
                 SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value                             
+
+                SH2RegAxStore <= REG_STORE; --Update the value                          
 
             ELSIF std_match(InstructionReg, SUB_Rm_Rn) THEN
                 -- Setting Reg Array control signals
@@ -1311,7 +1808,7 @@ BEGIN
                 FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
                 SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value                                    
+                SH2RegAxStore <= REG_STORE; --Update the value   
 
             ELSIF std_match(InstructionReg, SUBV_Rm_Rn) THEN
                 -- Setting Reg Array control signals
@@ -1324,7 +1821,7 @@ BEGIN
                 FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_OVERFLOW); --Load into Status Register the new Carryout
                 SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
                 SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value                                            
+                SH2RegAxStore <= REG_STORE; --Update the value                                           
 
             ELSIF std_match(InstructionReg, NEG_Rm_Rn) THEN
                 -- Setting Reg Array control signals
@@ -1357,7 +1854,7 @@ BEGIN
 
             ELSIF std_match(InstructionReg, EXTS_B_Rm_Rn) THEN
                 SignExtBus := (regLen - 1 downto 8 => SH2ALUResult(7)) & SH2ALUResult(7 downto 0);
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegIn <= SignExtBus; --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;
 
@@ -1377,7 +1874,7 @@ BEGIN
                     SH2RegInSel <= REG_SR;
                     SH2RegStore <= REG_STORE;
                 END IF;
-
+                                        
             ELSIF std_match(InstructionReg, CMP_EQ_imm_R0) THEN
                 IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
                     FlagUpdate := RegArrayOutA1;
@@ -1696,21 +2193,198 @@ BEGIN
                 SH2RegStore <= REG_STORE;
 
                 --  ==================================================================================================
-                -- MOV
+                -- LOAD
                 --  ==================================================================================================
+
+                -- Load immediate
+            ELSIF std_match(MOV_IMM_TO_Rn, InstructionReg) THEN
+
+                -- Store immediate data into Rn
+                SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(7 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                -- Load from reg address directly
+            ELSIF std_match(MOVB_atRm_TO_Rn, InstructionReg) THEN
+
+                -- Store data bus data into Rn
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(MOVW_atRm_TO_Rn, InstructionReg) THEN
+
+                -- Store data bus data into Rn
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
 
             ELSIF std_match(MOVL_atRm_TO_Rn, InstructionReg) THEN
 
+                -- Store data bus data into Rn
                 SH2RegIn <= SH2DataBus;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access value inside register Rn (at index n)
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
 
-                ReadFromMemoryL <= READ_FROM_MEMORY;
+                -- Load from reg address + reg address in R0
+            ELSIF std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) THEN
+
+                -- Store data bus data into R0
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) THEN
+
+                -- Store data bus data into R0
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) THEN
+
+                -- Store data bus data into Rn
+                SH2RegIn <= SH2DataBus;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                -- Load from reg address post-incremented
+            ELSIF std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) THEN
+
+                -- Store data bus data into Rn
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                -- Store new calculated address into Rm
+                SH2RegAxIn <= DMAUPostIncDecSrc;
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
+                SH2RegAxStore <= REG_STORE;
+
+            ELSIF std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) THEN
+
+                -- Store data bus data into Rn
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                -- Store new calculated address into Rm
+                SH2RegAxIn <= DMAUPostIncDecSrc;
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
+                SH2RegAxStore <= REG_STORE;
+
+            ELSIF std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) THEN
+
+                -- Store data bus data into Rn
+                SH2RegIn <= SH2DataBus;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                -- Store new calculated address into Rm
+                SH2RegAxIn <= DMAUPostIncDecSrc;
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
+                SH2RegAxStore <= REG_STORE;
+
+                -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
+            ELSIF std_match(MOVB_atDispRm_TO_R0, InstructionReg) THEN
+
+                -- Store data bus data into Rn
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= 0; -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(MOVW_atDispRm_TO_R0, InstructionReg) THEN
+
+                -- Store data bus data into Rn
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= 0; -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(MOVL_atDispRm_TO_Rn, InstructionReg) THEN
+
+                -- Store data bus data into Rn
+                SH2RegIn <= SH2DataBus;
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                SH2RegStore <= REG_STORE;
+
+                -- Load from dis * (1,2,4) + GBR (into R0)
+            ELSIF std_match(MOV_B_R0_GBR, InstructionReg) THEN
+                -- Store data bus data into R0
+                ReadBSetSH2RegIn;
+                SH2RegInSel <= 0; -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(MOV_W_R0_GBR, InstructionReg) THEN
+
+                -- Store data bus data into R0
+                ReadWSetSH2RegIn;
+                SH2RegInSel <= 0; -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+
+            ELSIF std_match(MOV_L_R0_GBR, InstructionReg) THEN
+
+                -- Store data bus data into R0
+                SH2RegIn <= SH2DataBus; -- sign-extended data bus value
+                SH2RegInSel <= 0; -- Store inside register R0
+                SH2RegStore <= REG_STORE;
+
+                --  ==================================================================================================
+                -- STORE
+                --  ==================================================================================================
+
+                -- Store value in Rm to RAM address in Rn
+            ELSIF std_match(MOVB_Rm_TO_atRn, InstructionReg) THEN
+
+            ELSIF std_match(MOVW_Rm_TO_atRn, InstructionReg) THEN
 
             ELSIF std_match(MOVL_Rm_TO_atRn, InstructionReg) THEN
-                WriteToMemoryL <= WRITE_TO_MEMORY;
 
-            
+                -- Store value in Rm to (RAM address in Rn + RAM address in R0)
+            ELSIF std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) THEN
+
+            ELSIF std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) THEN
+
+            ELSIF std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) THEN
+
+                -- Store value in Rm to (pre decremented RAM address in Rn)
+            ELSIF std_match(MOVB_Rm_TO_atPreDecRn, InstructionReg) THEN
+
+                -- Update Rn with pre-decremented address
+                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
+                SH2RegAxStore <= REG_STORE;
+
+            ELSIF std_match(MOVW_Rm_TO_atPreDecRn, InstructionReg) THEN
+
+                -- Update Rn with pre-decremented address
+                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
+                SH2RegAxStore <= REG_STORE;
+
+            ELSIF std_match(MOVL_Rm_TO_atPreDecRn, InstructionReg) THEN
+
+                -- Update Rn with pre-decremented address
+                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
+                SH2RegAxStore <= REG_STORE;
+
+                -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*disp)
+            ELSIF std_match(MOVB_R0_TO_atDispRn, InstructionReg) THEN
+
+            ELSIF std_match(MOVW_R0_TO_atDispRn, InstructionReg) THEN
+
+            ELSIF std_match(MOVL_Rm_TO_atDispRn, InstructionReg) THEN
+
+                -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR)
+            ELSIF std_match(MOV_B_GBR_R0, InstructionReg) THEN
+
+            ELSIF std_match(MOV_W_GBR_R0, InstructionReg) THEN
+
+            ELSIF std_match(MOV_L_GBR_R0, InstructionReg) THEN
+                                        
+                --==================================================
+                -- System Control and Reg to Reg Instructions
+                --===================================================
             ELSIF std_match(MOV_Rm_Rn, InstructionReg) THEN
 
             ELSIF std_match(MOVT_Rn, InstructionReg) THEN
@@ -1742,19 +2416,65 @@ BEGIN
                 SH2RegStore <= REG_STORE; --Actually write 
 
             ELSIF std_match(TRAPA_imm, InstructionReg) THEN
+
             END IF;
+
         END IF;
     END PROCESS executeInstruction;
+    ------------------------------------------------------------------------------------------------------ Combinationally-updating signals
+
+    --- DMAU write things: need to combinationally update to update in time for execution on the falling edge of the clock --
+    DMAUAddressIndex <= to_integer(unsigned(SH2CalculatedDataAddress(1 DOWNTO 0)));
+
+    -- Make sure low byte of Rm is put in the place where we memory will be reading it from!
+    -- recall, stores read the value to store from HoldRegA2, so we'll modify that
+    updateDataBusForWrite : PROCESS (WriteToMemoryB, WriteToMemoryW, DMAUAddressIndex, RegArrayOutA2)
+    BEGIN
+        -- Default assignment when a full word
+        HoldRegA2 <= RegArrayOutA2;
+
+        -- Byte write case
+        IF WriteToMemoryB = WRITE_TO_MEMORY THEN
+            CASE DMAUAddressIndex IS
+                WHEN 0 =>
+                    HoldRegA2(31 DOWNTO 24) <= RegArrayOutA2(7 DOWNTO 0);
+                WHEN 1 =>
+                    HoldRegA2(23 DOWNTO 16) <= RegArrayOutA2(7 DOWNTO 0);
+                WHEN 2 =>
+                    HoldRegA2(15 DOWNTO 8) <= RegArrayOutA2(7 DOWNTO 0);
+                WHEN 3 =>
+                    HoldRegA2(7 DOWNTO 0) <= RegArrayOutA2(7 DOWNTO 0);
+                WHEN OTHERS =>
+                    NULL; -- no operation
+            END CASE;
+
+            -- Word write case
+        ELSIF WriteToMemoryW = WRITE_TO_MEMORY THEN
+            CASE DMAUAddressIndex IS
+                WHEN 0 =>
+                    HoldRegA2(31 DOWNTO 16) <= RegArrayOutA2(15 DOWNTO 0);
+                WHEN 1 =>
+                    HoldRegA2(23 DOWNTO 8) <= RegArrayOutA2(15 DOWNTO 0);
+                WHEN 2 =>
+                    HoldRegA2(15 DOWNTO 0) <= RegArrayOutA2(15 DOWNTO 0);
+                WHEN OTHERS =>
+                    NULL; -- no operation
+            END CASE;
+        END IF;
+    END PROCESS updateDataBusForWrite;
+    ------------------------
+
     -- Set buses (This is combinational, outside of any clocked process.)
     SH2DataBus <= SH2DataBus WHEN SH2SelDataBus = HOLD_DATA_BUS ELSE
-        HoldRegA WHEN SH2SelDataBus = SET_DATA_BUS_TO_REG_A_OUT ELSE
+        HoldRegA2 WHEN SH2SelDataBus = SET_DATA_BUS_TO_REG_A2_OUT ELSE
         SH2ALUResult WHEN SH2SelDataBus = SET_DATA_BUS_TO_ALU_OUT ELSE
         (OTHERS => 'Z');
 
+    -- Note: We multiply the PC by 4 because each 32 memory block is 4 addresses apart
     SH2AddressBus <= SH2AddressBus WHEN SH2SelAddressBus = HOLD_ADDRESS_BUS ELSE
         SH2CalculatedDataAddress WHEN SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT ELSE
         STD_LOGIC_VECTOR(to_unsigned(4 * to_integer(unsigned(SH2PC)), SH2AddressBus'length)) WHEN SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT ELSE
-        HoldRegA2 WHEN SH2SelAddressBus = SET_ADDRESS_BUS_TO_REG_A2_OUT ELSE
+
         (OTHERS => 'Z');
     -- Make instruction reg combinational so that it updates immediately
     InstructionReg <= SH2DataBus(instrLen - 1 DOWNTO 0)
