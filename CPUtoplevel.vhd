@@ -425,8 +425,8 @@ architecture Structural of CPUtoplevel is
     signal SH2CalculatedDataAddress: std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU output address
     signal HoldCalculatedDataAddress: std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- save DMAU output address
                                                                                                   -- for write on next clock
-    signal DMAUPostIncDecSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated
-                                                                                        -- (Need control line to see which src)
+    signal DMAUPostIncDecSrc : std_logic_vector(regLen - 1 downto 0) := (others => '0');   -- DMAU input address, updated with inc/dec
+    signal DMAUAddressIndex : integer range 3 downto 0 := 0;    -- if the DMAU output address is x0403, this would be 3, for example
 
         -- Read and Write flags that the PMAU sets
     signal WriteToMemoryB : std_logic := NO_WRITE_TO_MEMORY;  -- active high
@@ -808,6 +808,14 @@ begin
             DMAUImmediateSource <= DMAU_ZERO_IMM;
             DMAUImmediateOffset <= MAU_ZERO_OFFSET;
 
+            -- Reset reads and writes;
+            WriteToMemoryB <= NO_WRITE_TO_MEMORY;
+            WriteToMemoryW <= NO_WRITE_TO_MEMORY;
+            WriteToMemoryL <= NO_WRITE_TO_MEMORY;
+            ReadFromMemoryB <= NO_READ_FROM_MEMORY;
+            ReadFromMemoryW <= NO_READ_FROM_MEMORY;
+            ReadFromMemoryL <= NO_READ_FROM_MEMORY;
+
         end procedure;
 
     begin
@@ -1171,6 +1179,8 @@ begin
                 -- Have DMAU take address directly from register
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
 
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
             elsif std_match(MOVW_atRm_TO_Rn, InstructionReg) then
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
@@ -1178,12 +1188,16 @@ begin
                 -- Have DMAU take address directly from register
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
 
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
             elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 downto 4))); -- Access address inside register Rm (at index m)
 
                 -- Have DMAU take address directly from register
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
             
             -- Load from reg address + reg address in R0
             elsif std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) then
@@ -1307,6 +1321,8 @@ begin
                 -- Have DMAU take address directly from register
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
 
+                WriteToMemoryB <= WRITE_TO_MEMORY; -- prepare for write
+
             elsif std_match(MOVW_Rm_TO_atRn, InstructionReg) then
                 -- Setting Reg Array control signals                                             
                 SH2RegA2Sel <= to_integer(unsigned(InstructionReg(7 downto 4)));   -- Access value at register Rm (at index m)
@@ -1314,6 +1330,8 @@ begin
 
                 -- Have DMAU take address directly from register
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+                WriteToMemoryW <= WRITE_TO_MEMORY; -- prepare for write
 
             elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
 
@@ -1323,6 +1341,8 @@ begin
 
                 -- Have DMAU take address directly from register
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
             
             -- Store value in Rm to (RAM address in Rn + RAM address in R0)
             elsif std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) then
@@ -1469,8 +1489,6 @@ begin
         -- by the state machine
 
         variable FlagUpdate    : std_logic_vector(regLen-1 downto 0) := (others => '0');
-        variable addressIndexInternal : integer range 3 downto 0 := 0;
-
         procedure SetDefaultExecuteSignals is
         begin
             -- Default RegArray inputs: Do not input any registers, 
@@ -1482,56 +1500,12 @@ begin
             SH2RegAxInSel <= REG_ZEROTH_SEL;
             SH2RegAxStore <= REG_NO_STORE; 
 
-            -- Reset reads and writes;
-            WriteToMemoryB <= NO_WRITE_TO_MEMORY;
-            WriteToMemoryW <= NO_WRITE_TO_MEMORY;
-            WriteToMemoryL <= NO_WRITE_TO_MEMORY;
-            ReadFromMemoryB <= NO_READ_FROM_MEMORY;
-            ReadFromMemoryW <= NO_READ_FROM_MEMORY;
-            ReadFromMemoryL <= NO_READ_FROM_MEMORY;
-
-        end procedure;
-
-        -- Make sure low byte of Rm is put in the place where we memory will be reading it from!
-        -- recall, stores read the value to store from HoldRegA2, so we'll modify that
-        procedure WriteBUpdateHoldRegA2Val is
-        begin
-            case addressIndexInternal is
-                when 0 => -- Store in highest byte
-                    HoldRegA2(31 downto 24) <= RegArrayOutA2(7 downto 0);
-                when 1 => -- Store in second highest byte
-                    HoldRegA2(23 downto 16) <= RegArrayOutA2(7 downto 0);
-                when 2 => -- Store in second lowest byte
-                    HoldRegA2(15 downto 8) <= RegArrayOutA2(7 downto 0);
-                when 3 => -- Store in lowest byte
-                    HoldRegA2(7 downto 0) <= RegArrayOutA2(7 downto 0);
-                when others =>
-                    -- should never get here
-            end case;
-        end procedure;
-
-        -- Make sure low word of Rm is put in the place where we memory will be reading it from!
-        -- recall, stores read the value to store from HoldRegA2, so we'll modify that
-        procedure WriteWUpdateHoldRegA2Val is
-        begin
-            -- Make sure low byte of Rm is put in the place where we memory will be reading it from!
-            -- recall, stores read the value to store from HoldRegA2, so we'll modify that
-            case addressIndexInternal is
-                when 0 => -- Store starting from highest byte
-                    HoldRegA2(31 downto 16) <= RegArrayOutA2(15 downto 0);
-                when 1 => -- Store starting from second highest byte
-                    HoldRegA2(23 downto 8) <= RegArrayOutA2(15 downto 0);
-                when 2 => -- Store starting from second lowest byte
-                    HoldRegA2(15 downto 0) <= RegArrayOutA2(15 downto 0);
-                when others =>
-                    -- should never get here
-            end case;
         end procedure;
 
         -- Make sure SH2RegIn is taking the correct byte from the SH2DataBus
         procedure ReadBSetSH2RegIn is
         begin
-            case addressIndexInternal is
+            case DMAUAddressIndex is
                 when 0 => -- Grab highest byte
                     SH2RegIn <= std_logic_vector(resize(signed(SH2DataBus(31 downto 24)), regLen)); -- sign-extended data bus value
                 when 1 => -- Grab second highest byte
@@ -1548,7 +1522,7 @@ begin
         -- Make sure SH2RegIn is taking the correct word from the SH2DataBus
         procedure ReadWSetSH2RegIn is
         begin
-            case addressIndexInternal is
+            case DMAUAddressIndex is
                 when 0 => -- Grab highest word
                     SH2RegIn <= std_logic_vector(resize(signed(SH2DataBus(31 downto 16)), regLen)); -- sign-extended data bus value
                 when 1 => -- Grab middle word
@@ -1566,11 +1540,6 @@ begin
         if CurrentState = FETCH_IR and rising_edge(SH2Clock) then
 
             SetDefaultExecuteSignals;
-
-            -- Save the values of the registers for execute state, which is a clock after the instruction
-            HoldRegA2 <= RegArrayOutA2;
-            HoldCalculatedDataAddress <= SH2CalculatedDataAddress;
-            addressIndexInternal := to_integer(unsigned(SH2CalculatedDataAddress(1 downto 0)));
 
             --  ==================================================================================================
             -- ARITHMETIC
@@ -1888,8 +1857,6 @@ begin
                 ReadBSetSH2RegIn;
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
-                
-                ReadFromMemoryB <= READ_FROM_MEMORY;
 
             elsif std_match(MOVW_atRm_TO_Rn, InstructionReg) then
 
@@ -1898,16 +1865,12 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
 
-                ReadFromMemoryW <= READ_FROM_MEMORY;
-
             elsif std_match(MOVL_atRm_TO_Rn, InstructionReg) then
 
                 -- Store data bus data into Rn
                 SH2RegIn <= SH2DataBus;
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
-                
-                ReadFromMemoryL <= READ_FROM_MEMORY;
             
             -- Load from reg address + reg address in R0
             elsif std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) then
@@ -1916,8 +1879,6 @@ begin
                 ReadBSetSH2RegIn;
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
-                
-                ReadFromMemoryB <= READ_FROM_MEMORY;
 
             elsif std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) then
 
@@ -1925,8 +1886,6 @@ begin
                 ReadWSetSH2RegIn;
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
-                
-                ReadFromMemoryW <= READ_FROM_MEMORY;
 
             elsif std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) then
 
@@ -1934,8 +1893,6 @@ begin
                 SH2RegIn <= SH2DataBus;
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
-                
-                ReadFromMemoryL <= READ_FROM_MEMORY;
 
             -- Load from reg address post-incremented
             elsif std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) then
@@ -1949,8 +1906,6 @@ begin
                 SH2RegAxIn <= DMAUPostIncDecSrc;
                 SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 downto 4)));  -- Store inside register Rm
                 SH2RegAxStore <= REG_STORE;
-                
-                ReadFromMemoryB <= READ_FROM_MEMORY;
 
             elsif std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) then
 
@@ -1964,8 +1919,6 @@ begin
                 SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 downto 4)));  -- Store inside register Rm
                 SH2RegAxStore <= REG_STORE;
 
-                ReadFromMemoryW <= READ_FROM_MEMORY;
-
             elsif std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) then
 
                 -- Store data bus data into Rn
@@ -1978,8 +1931,6 @@ begin
                 SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 downto 4)));  -- Store inside register Rm
                 SH2RegAxStore <= REG_STORE;
 
-                ReadFromMemoryL <= READ_FROM_MEMORY;
-
             -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
             elsif std_match(MOVB_atDispRm_TO_R0, InstructionReg) then
 
@@ -1987,8 +1938,6 @@ begin
                 ReadBSetSH2RegIn;
                 SH2RegInSel <= 0;  -- Store inside register R0
                 SH2RegStore <= REG_STORE;
-                
-                ReadFromMemoryB <= READ_FROM_MEMORY;
 
             elsif std_match(MOVW_atDispRm_TO_R0, InstructionReg) then
 
@@ -1996,8 +1945,6 @@ begin
                 ReadWSetSH2RegIn;
                 SH2RegInSel <= 0;  -- Store inside register R0
                 SH2RegStore <= REG_STORE;
-                
-                ReadFromMemoryW <= READ_FROM_MEMORY;
 
             elsif std_match(MOVL_atDispRm_TO_Rn, InstructionReg) then
 
@@ -2006,16 +1953,12 @@ begin
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8)));  -- Store inside register Rn (at index n)
                 SH2RegStore <= REG_STORE;
                 
-                ReadFromMemoryL <= READ_FROM_MEMORY;
-                
             -- Load from dis * (1,2,4) + GBR (into R0)
             elsif std_match(MOV_B_R0_GBR, InstructionReg) then
                 -- Store data bus data into R0
                 ReadBSetSH2RegIn;
                 SH2RegInSel <= 0;  -- Store inside register R0
                 SH2RegStore <= REG_STORE;
-
-                ReadFromMemoryB <= READ_FROM_MEMORY;
 
             elsif std_match(MOV_W_R0_GBR, InstructionReg) then
 
@@ -2024,16 +1967,12 @@ begin
                 SH2RegInSel <= 0;  -- Store inside register R0
                 SH2RegStore <= REG_STORE;
 
-                ReadFromMemoryW <= READ_FROM_MEMORY;
-
             elsif std_match(MOV_L_R0_GBR, InstructionReg) then
 
                 -- Store data bus data into R0
                 SH2RegIn <= SH2DataBus; -- sign-extended data bus value
                 SH2RegInSel <= 0;  -- Store inside register R0
                 SH2RegStore <= REG_STORE;
-
-                ReadFromMemoryL <= READ_FROM_MEMORY;
 
             --  ==================================================================================================
             -- STORE
@@ -2042,36 +1981,19 @@ begin
              -- Store value in Rm to RAM address in Rn
             elsif std_match(MOVB_Rm_TO_atRn, InstructionReg) then
 
-                WriteBUpdateHoldRegA2Val; 
-                WriteToMemoryB <= WRITE_TO_MEMORY;
-
             elsif std_match(MOVW_Rm_TO_atRn, InstructionReg) then
-                
-                WriteWUpdateHoldRegA2Val;
-                WriteToMemoryW <= WRITE_TO_MEMORY;
 
             elsif std_match(MOVL_Rm_TO_atRn, InstructionReg) then
-                WriteToMemoryL <= WRITE_TO_MEMORY;
             
             -- Store value in Rm to (RAM address in Rn + RAM address in R0)
             elsif std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) then
-                
-                WriteBUpdateHoldRegA2Val;
-                WriteToMemoryB <= WRITE_TO_MEMORY;
 
             elsif std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) then
-                
-                WriteWUpdateHoldRegA2Val;
-                WriteToMemoryW <= WRITE_TO_MEMORY;
 
             elsif std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) then
-                WriteToMemoryL <= WRITE_TO_MEMORY;
 
             -- Store value in Rm to (pre decremented RAM address in Rn)
             elsif std_match(MOVB_Rm_TO_atPreDecRn, InstructionReg) then
-
-                WriteBUpdateHoldRegA2Val;
-                WriteToMemoryB <= WRITE_TO_MEMORY;
 
                 -- Update Rn with pre-decremented address
                 SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
@@ -2080,17 +2002,12 @@ begin
 
             elsif std_match(MOVW_Rm_TO_atPreDecRn, InstructionReg) then
 
-                WriteWUpdateHoldRegA2Val;
-                WriteToMemoryW <= WRITE_TO_MEMORY;
-
                 -- Update Rn with pre-decremented address
                 SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
                 SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); -- Store inside register Rn
                 SH2RegAxStore <= REG_STORE;
 
             elsif std_match(MOVL_Rm_TO_atPreDecRn, InstructionReg) then
-
-                WriteToMemoryL <= WRITE_TO_MEMORY;
 
                 -- Update Rn with pre-decremented address
                 SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
@@ -2100,38 +2017,65 @@ begin
             -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*disp)
             elsif std_match(MOVB_R0_TO_atDispRn, InstructionReg) then
 
-                WriteBUpdateHoldRegA2Val;
-                WriteToMemoryB <= WRITE_TO_MEMORY;
-
             elsif std_match(MOVW_R0_TO_atDispRn, InstructionReg) then
 
-                WriteWUpdateHoldRegA2Val;
-                WriteToMemoryW <= WRITE_TO_MEMORY;
-
             elsif std_match(MOVL_Rm_TO_atDispRn, InstructionReg) then
-
-                WriteToMemoryL <= WRITE_TO_MEMORY;
 
             -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR)
             elsif std_match(MOV_B_GBR_R0, InstructionReg) then
 
-                WriteBUpdateHoldRegA2Val;
-                WriteToMemoryB <= WRITE_TO_MEMORY;
-
             elsif std_match(MOV_W_GBR_R0, InstructionReg) then
 
-                WriteWUpdateHoldRegA2Val;
-                WriteToMemoryW <= WRITE_TO_MEMORY;
-
             elsif std_match(MOV_L_GBR_R0, InstructionReg) then
-
-                WriteToMemoryL <= WRITE_TO_MEMORY;
             
             end if;
 
         end if;
     end process executeInstruction;
 
+
+    ------------------------------------------------------------------------------------------------------ Combinationally-updating signals
+
+    --- DMAU write things: need to combinationally update to update in time for execution on the falling edge of the clock --
+    DMAUAddressIndex <= to_integer(unsigned(SH2CalculatedDataAddress(1 downto 0)));
+
+    -- Make sure low byte of Rm is put in the place where we memory will be reading it from!
+    -- recall, stores read the value to store from HoldRegA2, so we'll modify that
+    updateDataBusForWrite : process(WriteToMemoryB, WriteToMemoryW, DMAUAddressIndex, RegArrayOutA2)
+    begin
+        -- Default assignment when a full word
+        HoldRegA2 <= RegArrayOutA2;
+
+        -- Byte write case
+        if WriteToMemoryB = WRITE_TO_MEMORY then
+            case DMAUAddressIndex is
+                when 0 =>
+                    HoldRegA2(31 downto 24) <= RegArrayOutA2(7 downto 0);
+                when 1 =>
+                    HoldRegA2(23 downto 16) <= RegArrayOutA2(7 downto 0);
+                when 2 =>
+                    HoldRegA2(15 downto 8) <= RegArrayOutA2(7 downto 0);
+                when 3 =>
+                    HoldRegA2(7 downto 0) <= RegArrayOutA2(7 downto 0);
+                when others =>
+                    null; -- no operation
+            end case;
+
+        -- Word write case
+        elsif WriteToMemoryW = WRITE_TO_MEMORY then
+            case DMAUAddressIndex is
+                when 0 =>
+                    HoldRegA2(31 downto 16) <= RegArrayOutA2(15 downto 0);
+                when 1 =>
+                    HoldRegA2(23 downto 8) <= RegArrayOutA2(15 downto 0);
+                when 2 =>
+                    HoldRegA2(15 downto 0) <= RegArrayOutA2(15 downto 0);
+                when others =>
+                    null; -- no operation
+            end case;
+        end if;
+    end process updateDataBusForWrite;
+    ------------------------
 
     -- Set buses (This is combinational, outside of any clocked process.)
     SH2DataBus <= SH2DataBus when SH2SelDataBus = HOLD_DATA_BUS else
@@ -2141,7 +2085,7 @@ begin
 
     -- Note: We multiply the PC by 4 because each 32 memory block is 4 addresses apart
     SH2AddressBus <= SH2AddressBus when SH2SelAddressBus = HOLD_ADDRESS_BUS else
-        HoldCalculatedDataAddress when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
+        SH2CalculatedDataAddress when SH2SelAddressBus = SET_ADDRESS_BUS_TO_DMAU_OUT else
     std_logic_vector(to_unsigned(4 * to_integer(unsigned(SH2PC)), SH2AddressBus'length)) when SH2SelAddressBus = SET_ADDRESS_BUS_TO_PMAU_OUT else
             (others => 'Z');
 
