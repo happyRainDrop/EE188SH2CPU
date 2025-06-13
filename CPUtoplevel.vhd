@@ -41,6 +41,7 @@
 --     11 June 25 Ruth Berkun       Update addressbus to reflect 4*PC value (Each longword is 4 apart in memory address now) 
 --     11 June 25 Nerissa Finnen    Updated all Shift commands to new style
 --     12 June 25 Ruth Berkun       Implementing MOV commands (load and store)
+--     12 June 25 Ruth Berkun       JMP working and tested, also put GBR and VBR back into RegArray
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -91,6 +92,7 @@ PACKAGE SH2_CPU_Constants IS
     CONSTANT PMAU_SRC_SEL_PC : INTEGER := 0;
     CONSTANT PMAU_SRC_SEL_REG : INTEGER := 1;
     CONSTANT PMAU_SRC_SEL_IMM : INTEGER := 2;
+    CONSTANT PMAU_SRC_SEL_PR : INTEGER := 3;
 
     -- PMAU offset select
     CONSTANT PMAU_OFFSET_SEL_ZEROES : INTEGER := 0;
@@ -111,6 +113,8 @@ PACKAGE SH2_CPU_Constants IS
     -- Special register indices
     CONSTANT REG_PR : INTEGER := 16;
     CONSTANT REG_SR : INTEGER := 17;
+    CONSTANT REG_GBR : INTEGER := 18;
+    CONSTANT REG_VBR : INTEGER := 19;
 
     -- Choosing data and address bus indicies
     CONSTANT NUM_DATA_BUS_OPTIONS : INTEGER := 3; -- ALU, regs, hold, open
@@ -525,6 +529,7 @@ BEGIN
     -- Instantiate DMAU
     SH2DMAU : ENTITY work.SH2DMAU
         PORT MAP(
+            SH2DMAUGBRSource => RegArrayOutA1,
             SH2DMAURegSource => RegArrayOutA,
             SH2DMAUImmediateSource => DMAUImmediateSource,
             SH2DMAURegOffset => RegArrayOutB,
@@ -534,13 +539,14 @@ BEGIN
             SH2DMAUIncDecSel => SH2DMAUIncDecSel,
             SH2DMAUIncDecBit => SH2DMAUIncDecBit,
             SH2DMAUPrePostSel => SH2DMAUPrePostSel,
-            SH2DataAddressBus => SH2CalculatedDataAddress, -- just GBR?
+            SH2DataAddressBus => SH2CalculatedDataAddress, 
             SH2DataAddressSrc => DMAUPostIncDecSrc
         );
 
     -- Instantiate PMAU
     SH2PMAU : ENTITY work.SH2PMAU
         PORT MAP(
+            SH2PR => RegArrayOutA1, -- make PR come out on the A1 output reg
             SH2PC => SH2PC,
             SH2PMAURegSource => RegArrayOutA,
             SH2PMAUImmediateSource => PMAUImmediateSource,

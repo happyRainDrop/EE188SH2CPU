@@ -29,7 +29,7 @@ package SH2PMAUConstants is
   constant regCount     : integer := 18;   -- 16 general + 2 special registers
 
   -- PMAU configuration
-  constant pmauSourceCount  : integer := 3;    -- from reg array, PC, or immediate
+  constant pmauSourceCount  : integer := 4;    -- from reg array, PC, or immediate
   constant pmauOffsetCount  : integer := 7;    -- 0, R0x1, R0x2, R0x4, Immx1, Immx2, Immx4
   constant maxIncDecBitPMAU     : integer := 3;    -- Allow inc/dec up to bit 3 (+-4)
 
@@ -37,6 +37,7 @@ package SH2PMAUConstants is
   constant PMAU_SRC_SEL_PC : integer := 0;
   constant PMAU_SRC_SEL_REG : integer := 1;
   constant PMAU_SRC_SEL_IMM : integer := 2;
+  constant PMAU_SRC_SEL_PR : integer := 3;
 
   -- PMAU offset select
   constant PMAU_OFFSET_SEL_ZEROES : integer := 0;
@@ -55,6 +56,7 @@ use ieee.std_logic_1164.all;
 
 entity  SH2PMAU  is
     port(
+        SH2PR : in      std_logic_vector(regLen - 1 downto 0); -- PR as input source
         SH2PC : in      std_logic_vector(regLen - 1 downto 0); -- PC as input source
         SH2PMAURegSource :  in std_logic_vector(regLen-1 downto 0);
         SH2PMAUImmediateSource :  in std_logic_vector(regLen-1 downto 0);
@@ -109,6 +111,7 @@ begin
     SH2PMAUAddrSrc(PMAU_SRC_SEL_REG) <= SH2PMAURegSource; --Sources can come from register array
     SH2PMAUAddrSrc(PMAU_SRC_SEL_IMM) <= SH2PMAUImmediateSource; --or be an immediate value from the control unit
     SH2PMAUAddrSrc(PMAU_SRC_SEL_PC) <= SH2PC; -- or PC (external)
+    SH2PMAUAddrSrc(PMAU_SRC_SEL_PR) <= SH2PR; -- or PR (external)
 
     -- Fill offset array.
     SH2PMAUAddrOff(PMAU_OFFSET_SEL_ZEROES) <= (others => '0');  -- Offset can be all zeros (no offset)

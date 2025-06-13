@@ -69,6 +69,7 @@ use ieee.std_logic_1164.all;
 
 entity  SH2DMAU  is
     port(
+        SH2DMAUGBRSource :  in std_logic_vector(regLen-1 downto 0);
         SH2DMAURegSource :  in std_logic_vector(regLen-1 downto 0);
         SH2DMAUImmediateSource :  in std_logic_vector(regLen-1 downto 0);
         SH2DMAURegOffset :  in std_logic_vector(regLen-1 downto 0);
@@ -125,8 +126,7 @@ begin
     -- Fill source array. 
     SH2DMAUAddrSrc(DMAU_SRC_SEL_REG) <= SH2DMAURegSource; --Sources can come from register array (general register)
     SH2DMAUAddrSrc(DMAU_SRC_SEL_IMM) <= SH2DMAUImmediateSource; --or be an immediate value from the control unit
-    SH2DMAUAddrSrc(DMAU_SRC_SEL_GBR) <= SH2GBR;
-    SH2DMAUAddrSrc(DMAU_SRC_SEL_VBR) <= SH2VBR;
+    SH2DMAUAddrSrc(DMAU_SRC_SEL_GBR) <= SH2DMAUGBRSource;
 
     -- Fill offset array.
     SH2DMAUAddrOff(DMAU_OFFSET_SEL_ZEROES) <= (others => '0');  -- Offset can be all zeros (no offset)

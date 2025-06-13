@@ -18,6 +18,8 @@
 --     22 Apr 25  Ruth Berkun       Copied over for SH2Reg
 --      3 May 25  Ruth Berkun       Fix syntax errors, hook up 0s to unused reg.vhd ports
 --     12 May 25  Ruth Berkun       Remove PC, GBR, VBR from reg array
+--     09 June 25 Ruth Berkun       Unclock registers for instantaneous access
+--     13 June 25 Ruth Berkun       Add GBR, VBRback into reg array
 ----------------------------------------------------------------------------
 
 --
@@ -31,7 +33,7 @@ package SH2RegConstants is
 
   -- Register and word size configuration
   constant regLen       : integer := 32;   -- Each register is 32 bits
-  constant regCount     : integer := 18;   -- 16 general + 2 special registers (PR, SR)
+  constant regCount     : integer := 20;   -- 16 general + 4 special registers (PR, SR, GBR, VBR)
 
 end package;
 
