@@ -137,8 +137,8 @@ PACKAGE SH2_CPU_Constants IS
     CONSTANT MAU_ZERO_OFFSET : STD_LOGIC_VECTOR(31 DOWNTO 0) := (OTHERS => '0');
 
     -- Incrementing in PMAU
-    CONSTANT DEFAULT_PRE_SEL : STD_LOGIC := '1';
-    CONSTANT DEFAULT_INC_SEL : STD_LOGIC := '0';
+    CONSTANT DEFAULT_PRE_SEL : STD_LOGIC := MAU_PRE_SEL;
+    CONSTANT DEFAULT_INC_SEL : STD_LOGIC := MAU_INC_SEL;
     CONSTANT DEFAULT_NO_OFF_VAL : INTEGER := 0;
 
     -- Incrementing in DMAU
@@ -464,6 +464,7 @@ ARCHITECTURE Structural OF CPUtoplevel IS
 
     SIGNAL SH2PC : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- the PC: a very special register!
     SIGNAL SH2PC_next : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- what to set PC to on next rising edge of clock
+    SIGNAL SH2PC_postincdec : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0'); -- PC post incremented/decremented
     ------------------------------------------------------------------------------------------
 
     -- Signals and states
@@ -477,7 +478,7 @@ ARCHITECTURE Structural OF CPUtoplevel IS
     SIGNAL PrevIR : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0) := (OTHERS => 'Z'); -- IR
     SIGNAL ClockCounter : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); -- what clock cycle are we on?
 
-    SIGNAL MultiClockReg : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the multiclock instruction that is executed
+    SIGNAL MultiClockReg : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0); --Holds the multiclock instruction that is executed
     SIGNAL ClockTwo : STD_LOGIC; --Clock cycle for multiclock instructions
     SIGNAL DummyPC : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the new PC value to load
 
@@ -540,7 +541,6 @@ BEGIN
     -- Instantiate PMAU
     SH2PMAU : ENTITY work.SH2PMAU
         PORT MAP(
-            SH2PMAUHold => SH2PMAUHold,
             SH2PC => SH2PC,
             SH2PMAURegSource => RegArrayOutA,
             SH2PMAUImmediateSource => PMAUImmediateSource,
@@ -551,7 +551,8 @@ BEGIN
             SH2PMAUIncDecSel => SH2PMAUIncDecSel,
             SH2PMAUIncDecBit => SH2PMAUIncDecBit,
             SH2PMAUPrePostSel => SH2PMAUPrePostSel,
-            SH2ProgramAddressBus => SH2PC_next --make the PC come out into here
+            SH2ProgramAddressBus => SH2PC_next, --make the PC come out into here
+            SH2PostIncDecAddressBus => SH2PC_postincdec
         );
 
     -- ================================================================================================== Finite State Machine
@@ -559,24 +560,26 @@ BEGIN
         --========================================================== Procedures
         PROCEDURE holdPC IS
         BEGIN
-            SH2PMAUHold <= PMAU_HOLD;
-            SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
-            PMAUImmediateOffset <= DEFAULT_OFFSET_VAL;
+            SH2PMAUSrcSel <= PMAU_SRC_SEL_IMM;
             SH2PMAUOffsetSel <= DEFAULT_OFFSET_SEL;
             SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
             SH2PMAUIncDecBit <= DEFAULT_BIT;
             SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
+            PMAUImmediateSource <= DMAU_ZERO_IMM;
+            PMAUImmediateOffset <= MAU_ZERO_OFFSET;
         END PROCEDURE;
 
         PROCEDURE incPC IS
         BEGIN
-            SH2PMAUHold <= PMAU_NO_HOLD;
             SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
-            SH2PMAUOffsetSel <= DEFAULT_NO_OFF_VAL;
+            SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_ZEROES;
             SH2PMAUIncDecSel <= DEFAULT_INC_SEL;
             SH2PMAUIncDecBit <= DEFAULT_BIT;
-            SH2PMAUPrePostSel <= DEFAULT_PRE_SEL;
+            SH2PMAUPrePostSel <= MAU_PRE_SEL;
+            PMAUImmediateSource <= DMAU_ZERO_IMM;
+            PMAUImmediateOffset <= MAU_ZERO_OFFSET;
             SH2PC <= SH2PC_next;
+
         END PROCEDURE;
 
         PROCEDURE disableReadWrite IS
@@ -591,14 +594,17 @@ BEGIN
             RE3 <= '1';
         END PROCEDURE;
 
-        PROCEDURE loadImmediate is
+        PROCEDURE PCLoadImmediate is
         begin
-                PMAUImmediateSource <= DummyPc; --Assign the immediate address from register
-                PMAUImmediateOffset <= DMAU_ZERO_IMM;
+                SH2PMAUSrcSel <= PMAU_SRC_SEL_IMM;
+                SH2PMAUOffsetSel <= DEFAULT_OFFSET_SEL;
                 SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
-                SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_IMM_OFFSET_x1;
-                SH2PMAUSrcSel <= PMAU_SRC_SEL_IMM; --Select the immediate address from register
+                SH2PMAUIncDecBit <= DEFAULT_BIT;
                 SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
+                PMAUImmediateSource <= DummyPc;
+                PMAUImmediateOffset <= MAU_ZERO_OFFSET;
+                SH2PC <= SH2PC_next;
+                
         END PROCEDURE;
 
     BEGIN
@@ -655,7 +661,7 @@ BEGIN
                     END IF;
 
                     IF (ClockTwo = '1') THEN
-                        loadImmediate;
+                        PCLoadImmediate;
                     ELSE
                         
                     END IF;
@@ -1700,6 +1706,7 @@ BEGIN
                 ClockTwo <= '1';    --Set up for the second clock
                 SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Load the immediate address from register
                 DummyPc <= RegArrayOutA; --Store the register
+                MultiClockReg <= InstructionReg;
             ELSE    
 
                 SetDefaultControlSignals;

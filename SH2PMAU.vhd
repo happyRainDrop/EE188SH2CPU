@@ -17,6 +17,7 @@
 --     12 May 25  Ruth Berkun       Move PC into the PMAU (so that regArray doesn't have
 --                                  to be constantly outputting PC every clock)
 --     16 May 25  Ruth Berkun       Do not let PC feed into itself
+--     13 June 25  Ruth Berkun      Remove hold signal, make logic more similar to DMAU
 ----------------------------------------------------------------------------
 
 library ieee;
@@ -54,7 +55,6 @@ use ieee.std_logic_1164.all;
 
 entity  SH2PMAU  is
     port(
-        SH2PMAUHold : in std_logic;    -- 0 to hold, 1 to not
         SH2PC : in      std_logic_vector(regLen - 1 downto 0); -- PC as input source
         SH2PMAURegSource :  in std_logic_vector(regLen-1 downto 0);
         SH2PMAUImmediateSource :  in std_logic_vector(regLen-1 downto 0);
@@ -65,7 +65,8 @@ entity  SH2PMAU  is
         SH2PMAUIncDecSel  : in      std_logic;
         SH2PMAUIncDecBit  : in      integer  range maxIncDecBitPMAU downto 0;
         SH2PMAUPrePostSel : in      std_logic;
-        SH2ProgramAddressBus : out     std_logic_vector(regLen - 1 downto 0)
+        SH2ProgramAddressBus : out     std_logic_vector(regLen - 1 downto 0);
+        SH2PostIncDecAddressBus : out  std_logic_vector(regLen - 1 downto 0)
     );
 
 end  SH2PMAU;
@@ -97,16 +98,9 @@ architecture  behavioral  of  SH2PMAU  is
         );
     end component;
 
-    -- PC
-    signal SH2PC_INTERNAL : std_logic_vector(regLen-1 downto 0) := (others => '0');
-
     -- PMAU source arrays
     signal SH2PMAUAddrSrc : std_logic_array(pmauSourceCount - 1 downto 0)(regLen - 1 downto 0);
     signal SH2PMAUAddrOff :std_logic_array(pmauOffsetCount - 1 downto 0)(regLen - 1 downto 0);
-
-    -- Intermediates
-    signal genericMAUProgramAddress : std_logic_vector(regLen-1 downto 0) := (others => '0');           -- output address of generic MAU
-    signal genericMAUProgramAddressIncDec : std_logic_vector(regLen-1 downto 0) := (others => '0');           -- output address of generic MAU
 
 begin
 
@@ -142,11 +136,8 @@ begin
             IncDecSel  => SH2PMAUIncDecSel,
             IncDecBit  => SH2PMAUIncDecBit,
             PrePostSel => SH2PMAUPrePostSel,
-            Address => open,
-            AddrSrcOut => genericMAUProgramAddress -- PC
+            Address => SH2ProgramAddressBus, -- PC
+            AddrSrcOut => SH2PostIncDecAddressBus -- PC
         );
-
-        SH2PC_INTERNAL <= genericMAUProgramAddress when (SH2PMAUHold = '1') else SH2PC_INTERNAL; -- hold logic
-        SH2ProgramAddressBus <= SH2PC_INTERNAL; -- output of PMAU is the PC address
 
 end  behavioral;
