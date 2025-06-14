@@ -484,7 +484,9 @@ ARCHITECTURE Structural OF CPUtoplevel IS
 
     SIGNAL MultiClockReg : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0); --Holds the multiclock instruction that is executed
     SIGNAL ClockTwo : STD_LOGIC; --Clock cycle for multiclock instructions
+    SIGNAL ClockThree : STD_LOGIC; --Clock cycle for multiclock instructions
     SIGNAL DummyPC : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the new PC value to load
+    SIGNAL StorePC : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the old PC value to push to PR
 
 BEGIN
 
@@ -1733,15 +1735,158 @@ BEGIN
                 SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Load the immediate address from register
                 DummyPc <= RegArrayOutA; --Store the register
                 MultiClockReg <= InstructionReg;
+            ELSIF std_match(STC_GBR_Rn, InstructionReg) THEN
+                SH2RegASel <= REG_GBR;
+                --Setting ALU control signals
+                SH2FCmd <= "1100"; --Use OpA
+                SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
+
+            ELSIF std_match(STC_VBR_Rn, InstructionReg) THEN
+                SH2RegASel <= REG_VBR;
+                --Setting ALU control signals
+                SH2FCmd <= "1100"; --Use OpA
+                SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
+
+            ELSIF std_match(STS_PR_Rn, InstructionReg) THEN
+                SH2RegASel <= REG_PR;
+                --Setting ALU control signals
+                SH2FCmd <= "1100"; --Use OpA
+                SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
+            
+            ELSIF std_match(LDC_Rm_GBR, InstructionReg) THEN
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                --Setting ALU control signals
+                SH2FCmd <= "1100"; --Use OpA
+                SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
+            
+            ELSIF std_match(LDC_Rm_VBR, InstructionReg) THEN
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                --Setting ALU control signals
+                SH2FCmd <= "1100"; --Use OpA
+                SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
+            
+            ELSIF std_match(LDS_Rm_PR, InstructionReg) THEN
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                --Setting ALU control signals
+                SH2FCmd <= "1100"; --Use OpA
+                SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
+            
+            ELSIF std_match(JSR_Rm, InstructionReg) THEN
+                ClockTwo <= '1';
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Load the immediate address from register
+                DummyPc <= RegArrayOutA; --Store the register
+                StorePC <= SH2PC;
+                MultiClockReg <= InstructionReg;
+
+            ELSIF std_match(BF_disp, InstructionReg) THEN
+                ClockTwo <= '1';
+
+            ELSIF std_match(RTE, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(RTS, InstructionReg) THEN
+                ClockTwo <= '1';
+
+            ELSIF std_match(BT_disp, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(BT_S_disp, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(BRA_disp, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(BRAF_disp, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(BSR_disp, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(BSRF_disp, InstructionReg) THEN
+                ClockTwo <= '1';
+
+            -- ==================================================================================================
+            -- ARITHMETIC
+            -- ==================================================================================================
+            ELSIF std_match(AND_B_imm_GBR, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(OR_B_imm_GBR, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(TST_B_imm_GBR, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(XOR_B_imm_GBR, InstructionReg) THEN
+                ClockTwo <= '1';
+            ELSIF std_match(TAS_B_Rn, InstructionReg) THEN
+                ClockTwo <= '1';
             ELSE    
 
                 SetDefaultControlSignals;
 
             END IF;
 
+            -- ==================================================================================================
+            -- Second Clock Cycle Reset
+            -- ==================================================================================================
             IF (ClockTwo = '1') THEN
                 IF std_match(JMP_Rm, MultiClockReg) THEN
                     ClockTwo <= '0'; --Reset the second clock
+                ELSIF std_match(JSR_Rm, InstructionReg) THEN
+                    ClockTwo <= '0'; --Reset the second clock
+                ELSIF std_match(BF_disp, InstructionReg) THEN
+                    ClockTwo <= '0';
+    
+                ELSIF std_match(RTE, InstructionReg) THEN
+                    ClockTwo <= '1';
+                ELSIF std_match(RTS, InstructionReg) THEN
+                    ClockTwo <= '1';
+    
+                ELSIF std_match(BT_disp, InstructionReg) THEN
+                    ClockTwo <= '1';
+                ELSIF std_match(BT_S_disp, InstructionReg) THEN
+                    ClockTwo <= '1';
+                ELSIF std_match(BRA_disp, InstructionReg) THEN
+                    ClockTwo <= '1';
+                ELSIF std_match(BRAF_disp, InstructionReg) THEN
+                    ClockTwo <= '1';
+                ELSIF std_match(BSR_disp, InstructionReg) THEN
+                    ClockTwo <= '1';
+                ELSIF std_match(BSRF_disp, InstructionReg) THEN
+                    ClockTwo <= '1';
+
+                -- ==================================================================================================
+                -- ARITHMETIC
+                -- ==================================================================================================
+                ELSIF std_match(AND_B_imm_GBR, InstructionReg) THEN
+                    ClockTwo <= '0';
+                    ClockThree <= '1';
+                ELSIF std_match(OR_B_imm_GBR, InstructionReg) THEN
+                    ClockTwo <= '0';
+                    ClockThree <= '1';
+                ELSIF std_match(TST_B_imm_GBR, InstructionReg) THEN
+                    ClockTwo <= '0';
+                    ClockThree <= '1';
+                ELSIF std_match(XOR_B_imm_GBR, InstructionReg) THEN
+                    ClockTwo <= '0';
+                    ClockThree <= '1';
+                ELSIF std_match(TAS_B_Rn, InstructionReg) THEN
+                    ClockTwo <= '0';
+                    ClockThree <= '1';
+                ELSE
+                END IF;
+
+                -- ==================================================================================================
+                -- Third Clock Cycle Reset
+                -- ==================================================================================================
+                IF (ClockThree = '1') THEN
+                -- ==================================================================================================
+                -- ARITHMETIC
+                -- ==================================================================================================
+                    IF std_match(AND_B_imm_GBR, InstructionReg) THEN
+                        ClockThree <= '0';
+                    ELSIF std_match(OR_B_imm_GBR, InstructionReg) THEN
+                        ClockThree <= '0';
+                    ELSIF std_match(TST_B_imm_GBR, InstructionReg) THEN
+                        ClockThree <= '0';
+                    ELSIF std_match(XOR_B_imm_GBR, InstructionReg) THEN
+                        ClockThree <= '0';
+                    ELSIF std_match(TAS_B_Rn, InstructionReg) THEN
+                    else
+                    END IF;    
+                else
                 END IF;
             END IF;
 
@@ -2389,16 +2534,12 @@ BEGIN
 
                 -- Store value in Rm to RAM address in Rn
             ELSIF std_match(MOVB_Rm_TO_atRn, InstructionReg) THEN
-
             ELSIF std_match(MOVW_Rm_TO_atRn, InstructionReg) THEN
-
             ELSIF std_match(MOVL_Rm_TO_atRn, InstructionReg) THEN
 
                 -- Store value in Rm to (RAM address in Rn + RAM address in R0)
             ELSIF std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) THEN
-
             ELSIF std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) THEN
-
             ELSIF std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) THEN
 
                 -- Store value in Rm to (pre decremented RAM address in Rn)
@@ -2425,16 +2566,12 @@ BEGIN
 
                 -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*disp)
             ELSIF std_match(MOVB_R0_TO_atDispRn, InstructionReg) THEN
-
             ELSIF std_match(MOVW_R0_TO_atDispRn, InstructionReg) THEN
-
             ELSIF std_match(MOVL_Rm_TO_atDispRn, InstructionReg) THEN
 
                 -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR)
             ELSIF std_match(MOV_B_GBR_R0, InstructionReg) THEN
-
             ELSIF std_match(MOV_W_GBR_R0, InstructionReg) THEN
-
             ELSIF std_match(MOV_L_GBR_R0, InstructionReg) THEN
 
             --========================================
@@ -2454,7 +2591,39 @@ BEGIN
 
             ELSIF std_match(STC_SR_Rn, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 0))); --Write back to the Rn
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); --Write back to the Rn
+                SH2RegStore <= REG_STORE; --Actually write 
+            ELSIF std_match(STC_GBR_Rn, InstructionReg) THEN
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); --Write back to the Rn
+                SH2RegStore <= REG_STORE; --Actually write 
+
+            ELSIF std_match(STC_VBR_Rn, InstructionReg) THEN
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); --Write back to the Rn
+                SH2RegStore <= REG_STORE; --Actually write 
+
+            ELSIF std_match(STS_PR_Rn, InstructionReg) THEN
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); --Write back to the Rn
+                SH2RegStore <= REG_STORE; --Actually write 
+            ELSIF std_match(LDC_Rm_GBR, InstructionReg) THEN
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= REG_GBR; --Write back to the Rn
+                SH2RegStore <= REG_STORE; --Actually write 
+            
+            ELSIF std_match(LDC_Rm_VBR, InstructionReg) THEN
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= REG_VBR; --Write back to the Rn
+                SH2RegStore <= REG_STORE; --Actually write 
+            
+            ELSIF std_match(LDS_Rm_PR, InstructionReg) THEN
+                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                SH2RegInSel <= REG_PR; --Write back to the Rn
+                SH2RegStore <= REG_STORE; --Actually write 
+            ELSIF std_match(JSR_Rm, InstructionReg) THEN
+                SH2RegIn <= StorePC; --Set what data needs to be written
+                SH2RegInSel <= REG_PR; --Write back to the Rn
                 SH2RegStore <= REG_STORE; --Actually write 
 
             END IF;
