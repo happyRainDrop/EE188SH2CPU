@@ -485,8 +485,9 @@ ARCHITECTURE Structural OF CPUtoplevel IS
     SIGNAL MultiClockReg : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0); --Holds the multiclock instruction that is executed
     SIGNAL ClockTwo : STD_LOGIC; --Clock cycle for multiclock instructions
     SIGNAL ClockThree : STD_LOGIC; --Clock cycle for multiclock instructions
-    SIGNAL DummyPC : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the new PC value to load
-    SIGNAL StorePC : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the old PC value to push to PR
+    SIGNAL DummyPc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the new PC value to load
+    SIGNAL StorePc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the old PC value to push to PR
+    SIGNAL OffsetPc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the offset PC value to load
 
 BEGIN
 
@@ -615,6 +616,30 @@ BEGIN
                 
         END PROCEDURE;
 
+        PROCEDURE PCLoadTwoXOffset is
+        begin
+            SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
+            SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_REG_OFFSET_x2;
+            SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
+            SH2PMAUIncDecBit <= DEFAULT_BIT;
+            SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
+            PMAUImmediateSource <= DMAU_ZERO_IMM;
+            PMAUImmediateOffset <= OffsetPc;
+            SH2PC <= SH2PC_next;
+        END PROCEDURE;
+
+        PROCEDURE PCLoadRegisterOffset is
+            begin
+                SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
+                SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_REG_OFFSET_x1;
+                SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
+                SH2PMAUIncDecBit <= DEFAULT_BIT;
+                SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
+                PMAUImmediateSource <= DMAU_ZERO_IMM;
+                PMAUImmediateOffset <= OffsetPc;
+                SH2PC <= SH2PC_next;
+            END PROCEDURE;
+
     BEGIN
 
         -- Rising edge: Update state, load PC, load IR
@@ -670,27 +695,27 @@ BEGIN
 
                     IF (ClockTwo = '1') THEN
                         IF std_match(JMP_Rm, MultiClockReg) THEN
-                            PCLoadImmediate;
-                        ELSIF std_match(JSR_Rm, InstructionReg) THEN
-                            PCLoadImmediate;
-                        ELSIF std_match(RTS, InstructionReg) THEN
-                            PCLoadImmediate;
-                        ELSIF std_match(BT_disp, InstructionReg)
-                            PCLoadImmediate;
-                        ELSIF std_match(BT_S_disp, InstructionReg)
-                            PCLoadImmediate;
-                        ELSIF std_match(BF_disp, InstructionReg)
-                            PCLoadImmediate;
-                        ELSIF std_match(BF_S_disp, InstructionReg)
-                            PCLoadImmediate;
-                        ELSIF std_match(BRA_disp, InstructionReg)
-                            PCLoadImmediate;
-                        ELSIF std_match(BRAF_disp, InstructionReg)
-                            PCLoadImmediate;
-                        ELSIF std_match(BSR_disp, InstructionReg)
-                            PCLoadImmediate;
-                        ELSIF std_match(BSRF_disp, InstructionReg)
-                            PCLoadImmediate;
+                            PCLoadImmediate;    --Load the Rm address to jump to
+                        ELSIF std_match(JSR_Rm, MultiClockReg) THEN
+                            PCLoadImmediate;    --Load the Rm address to jump to 
+                        ELSIF std_match(RTS, MultiClockReg) THEN
+                            PCLoadImmediate;    --Load the PR address to jump back to
+                        ELSIF std_match(BT_disp, MultiClockReg) THEN
+                            PCLoadImmediate;    --IDK
+                        ELSIF std_match(BT_S_disp, MultiClockReg) THEN
+                            PCLoadTwoXOffset;    --Load the 2x displacement into offset to jump to; 
+                        ELSIF std_match(BF_disp, MultiClockReg) THEN
+                            PCLoadImmediate;    --IDK
+                        ELSIF std_match(BF_S_disp, MultiClockReg) THEN
+                            PCLoadTwoXOffset;    --Load the 2x displacement into offset to jump to
+                        ELSIF std_match(BRA_disp, MultiClockReg) THEN
+                            PCLoadTwoXOffset;    --Load the 2x displacement into offset to jump to
+                        ELSIF std_match(BRAF_Rm, MultiClockReg) THEN
+                            PCLoadRegisterOffset;--Load the register displacement into offset to jump to
+                        ELSIF std_match(BSR_disp, MultiClockReg) THEN
+                            PCLoadRegisterOffset;--Load the register displacement into offset to jump to
+                        ELSIF std_match(BSRF_Rm, MultiClockReg) THEN
+                            PCLoadImmediate;     --IDK
                         else
                         END IF;
                             
@@ -1802,6 +1827,10 @@ BEGIN
                 StorePC <= SH2PC;
                 MultiClockReg <= InstructionReg;
 
+
+    --=================================================================
+    --WAITTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTt 
+    --=================================================================  
             ELSIF std_match(BF_disp, InstructionReg) THEN
                 SH2RegA1Sel <= REG_SR; 
                 IF RegArrayOutA1(0) = '0' THEN
@@ -1810,13 +1839,15 @@ BEGIN
                    SetDefaultControlSignals;
                 END IF;
 
-            ELSIF std_match(BF_disp, InstructionReg) THEN
+            ELSIF std_match(BF_S_disp, InstructionReg) THEN
                 SH2RegA1Sel <= REG_SR; 
                 IF RegArrayOutA1(0) = '0' THEN
-                    ClockTwo <= '1';
+                    ClockTwo <= '1';                
+                    OffsetPc <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                    MultiClockReg <= InstructionReg;
                 ELSE
                     SetDefaultControlSignals;
-            END IF;
+                END IF;
 
             ELSIF std_match(RTE, InstructionReg) THEN
                 ClockTwo <= '1';
@@ -1826,12 +1857,16 @@ BEGIN
                 DummyPc <= RegArrayOutA; --Store the register
                 MultiClockReg <= InstructionReg;
 
+
+    --=================================================================
+    --WAITTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTt
+    --=================================================================
             ELSIF std_match(BT_disp, InstructionReg) THEN
                 SH2RegA1Sel <= REG_SR; 
                 IF RegArrayOutA1(0) = '1' THEN
                     ClockTwo <= '1';
                 ELSE
-                   SetDefaultControlSignals
+                   SetDefaultControlSignals;
                 END IF;
 
                 ClockTwo <= '1';
@@ -1839,33 +1874,90 @@ BEGIN
                 SH2RegA1Sel <= REG_SR; 
                 IF RegArrayOutA1(0) = '1' THEN
                     ClockTwo <= '1';
+                    OffsetPc <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                    MultiClockReg <= InstructionReg;
                 ELSE
-                    SetDefaultControlSignals
+                    SetDefaultControlSignals;
                 END IF;   
 
             ELSIF std_match(BRA_disp, InstructionReg) THEN
                 ClockTwo <= '1';
+                OffsetPc <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                MultiClockReg <= InstructionReg;
 
-            ELSIF std_match(BRAF_disp, InstructionReg) THEN4
-                ClockTwo <= '1';
+            ELSIF std_match(BRAF_Rm, InstructionReg) THEN
+                ClockTwo <= '1'; --Multiclock instruction, prepare for the second clock execution
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Load the offset from register
+                OffsetPc <= RegArrayOutA; --Store the offset to the PC
+                MultiClockReg <= InstructionReg; --Record the multiclock instruction for future reference
 
             ELSIF std_match(BSR_disp, InstructionReg) THEN
                 ClockTwo <= '1';
+                OffsetPc <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                StorePC <= SH2PC; --Store the PC to PR later
+                MultiClockReg <= InstructionReg;
 
-            ELSIF std_match(BSRF_disp, InstructionReg) THEN
-                ClockTwo <= '1';
+            ELSIF std_match(BSRF_Rm, InstructionReg) THEN
+                ClockTwo <= '1'; --Multiclock instruction, prepare for the second clock execution
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Load the offset from register
+                OffsetPc <= RegArrayOutA; --Store the offset to the PC
+                StorePC <= SH2PC; --Store the PC to PR later
+                MultiClockReg <= InstructionReg; --Record the multiclock instruction for future reference
 
             -- ==================================================================================================
             -- ARITHMETIC
             -- ==================================================================================================
             ELSIF std_match(AND_B_imm_GBR, InstructionReg) THEN
                 ClockTwo <= '1';
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= REG_GBR; -- Access GBR (expected to come out on Reg A)
+                SH2RegA2Sel <= 0; --Load the displacement from register R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;  --Select the GBR register input
+                DMAUImmediateOffset <= RegArrayOutA2; --displacement in register R0
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1; --add the displacement from R0
+
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
             ELSIF std_match(OR_B_imm_GBR, InstructionReg) THEN
                 ClockTwo <= '1';
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= REG_GBR; -- Access GBR (expected to come out on Reg A)
+                SH2RegA2Sel <= 0; --Load the displacement from register R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;  --Select the GBR register input
+                DMAUImmediateOffset <= RegArrayOutA2; --displacement in register R0
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1; --add the displacement from R0
+
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
             ELSIF std_match(TST_B_imm_GBR, InstructionReg) THEN
                 ClockTwo <= '1';
+                                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= REG_GBR; -- Access GBR (expected to come out on Reg A)
+                SH2RegA2Sel <= 0; --Load the displacement from register R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;  --Select the GBR register input
+                DMAUImmediateOffset <= RegArrayOutA2; --displacement in register R0
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1; --add the displacement from R0
+
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+                
             ELSIF std_match(XOR_B_imm_GBR, InstructionReg) THEN
                 ClockTwo <= '1';
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= REG_GBR; -- Access GBR (expected to come out on Reg A)
+                SH2RegA2Sel <= 0; --Load the displacement from register R0
+
+                -- Have DMAU sum the addresses from the registers
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;  --Select the GBR register input
+                DMAUImmediateOffset <= RegArrayOutA2; --displacement in register R0
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1; --add the displacement from R0
+
+                ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
+
             ELSIF std_match(TAS_B_Rn, InstructionReg) THEN
                 ClockTwo <= '1';
             ELSE    
@@ -1879,48 +1971,48 @@ BEGIN
             -- ==================================================================================================
             IF (ClockTwo = '1') THEN
                 IF std_match(JMP_Rm, MultiClockReg) THEN
-                    ClockTwo <= '0'; --Reset the second clock
-                ELSIF std_match(JSR_Rm, InstructionReg) THEN
-                    ClockTwo <= '0'; --Reset the second clock
-                ELSIF std_match(BF_disp, InstructionReg) THEN
+                    ClockTwo <= '0'; 
+                ELSIF std_match(JSR_Rm, MultiClockReg) THEN
+                    ClockTwo <= '0'; 
+                ELSIF std_match(BF_disp, MultiClockReg) THEN
+                    ClockTwo <= '0'; 
+                    ClockThree <= '1'; --Set the third clock
+                ELSIF std_match(RTE, MultiClockReg) THEN
+                    ClockTwo <= '0'; 
+                ELSIF std_match(RTS, MultiClockReg) THEN
                     ClockTwo <= '0';
-                    ClockThree <= '1';
-                ELSIF std_match(RTE, InstructionReg) THEN
+                ELSIF std_match(BT_disp, MultiClockReg) THEN
                     ClockTwo <= '0';
-                ELSIF std_match(RTS, InstructionReg) THEN
+                    ClockThree <= '1'; --Set the third clock
+                ELSIF std_match(BT_S_disp, MultiClockReg) THEN
                     ClockTwo <= '0';
-                ELSIF std_match(BT_disp, InstructionReg) THEN
+                ELSIF std_match(BRA_disp, MultiClockReg) THEN
                     ClockTwo <= '0';
-                    ClockThree <= '1';
-                ELSIF std_match(BT_S_disp, InstructionReg) THEN
+                ELSIF std_match(BRAF_Rm, MultiClockReg) THEN
                     ClockTwo <= '0';
-                ELSIF std_match(BRA_disp, InstructionReg) THEN
+                ELSIF std_match(BSR_disp, MultiClockReg) THEN
                     ClockTwo <= '0';
-                ELSIF std_match(BRAF_disp, InstructionReg) THEN
-                    ClockTwo <= '0';
-                ELSIF std_match(BSR_disp, InstructionReg) THEN
-                    ClockTwo <= '0';
-                ELSIF std_match(BSRF_disp, InstructionReg) THEN
+                ELSIF std_match(BSRF_Rm, MultiClockReg) THEN
                     ClockTwo <= '0';
 
                 -- ==================================================================================================
                 -- ARITHMETIC
                 -- ==================================================================================================
-                ELSIF std_match(AND_B_imm_GBR, InstructionReg) THEN
+                ELSIF std_match(AND_B_imm_GBR, MultiClockReg) THEN
                     ClockTwo <= '0';
-                    ClockThree <= '1';
-                ELSIF std_match(OR_B_imm_GBR, InstructionReg) THEN
+                    ClockThree <= '1'; --Set the third clock
+                ELSIF std_match(OR_B_imm_GBR, MultiClockReg) THEN
                     ClockTwo <= '0';
-                    ClockThree <= '1';
-                ELSIF std_match(TST_B_imm_GBR, InstructionReg) THEN
+                    ClockThree <= '1'; --Set the third clock
+                ELSIF std_match(TST_B_imm_GBR, MultiClockReg) THEN
                     ClockTwo <= '0';
-                    ClockThree <= '1';
-                ELSIF std_match(XOR_B_imm_GBR, InstructionReg) THEN
+                    ClockThree <= '1'; --Set the third clock
+                ELSIF std_match(XOR_B_imm_GBR, MultiClockReg) THEN
                     ClockTwo <= '0';
-                    ClockThree <= '1';
-                ELSIF std_match(TAS_B_Rn, InstructionReg) THEN
+                    ClockThree <= '1'; --Set the third clock
+                ELSIF std_match(TAS_B_Rn, MultiClockReg) THEN
                     ClockTwo <= '0';
-                    ClockThree <= '1';
+                    ClockThree <= '1'; --Set the third clock
                 ELSE
                 END IF;
 
@@ -1931,19 +2023,19 @@ BEGIN
                 -- ==================================================================================================
                 -- ARITHMETIC
                 -- ==================================================================================================
-                    IF std_match(AND_B_imm_GBR, InstructionReg) THEN
+                    IF std_match(AND_B_imm_GBR, MultiClockReg) THEN
                         ClockThree <= '0';
-                    ELSIF std_match(OR_B_imm_GBR, InstructionReg) THEN
+                    ELSIF std_match(OR_B_imm_GBR, MultiClockReg) THEN
                         ClockThree <= '0';
-                    ELSIF std_match(TST_B_imm_GBR, InstructionReg) THEN
+                    ELSIF std_match(TST_B_imm_GBR, MultiClockReg) THEN
                         ClockThree <= '0';
-                    ELSIF std_match(XOR_B_imm_GBR, InstructionReg) THEN
+                    ELSIF std_match(XOR_B_imm_GBR, MultiClockReg) THEN
                         ClockThree <= '0';
-                    ELSIF std_match(TAS_B_Rn, InstructionReg) THEN
+                    ELSIF std_match(TAS_B_Rn, MultiClockReg) THEN
                         ClockThree <= '0';
-                    ELSIF std_match(BT_disp, InstructionReg) THEN
+                    ELSIF std_match(BT_disp, MultiClockReg) THEN
                         ClockThree <= '0';
-                    ELSIF std_match(BF_disp, InstructionReg) THEN
+                    ELSIF std_match(BF_disp, MultiClockReg) THEN
                         ClockThree <= '0';
 
                     else
@@ -2671,21 +2763,29 @@ BEGIN
                 SH2RegStore <= REG_STORE; --Actually write 
             ELSIF std_match(LDC_Rm_GBR, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= REG_GBR; --Write back to the Rn
+                SH2RegInSel <= REG_GBR; --Write back to the GBR
                 SH2RegStore <= REG_STORE; --Actually write 
             
             ELSIF std_match(LDC_Rm_VBR, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= REG_VBR; --Write back to the Rn
+                SH2RegInSel <= REG_VBR; --Write back to the VBR
                 SH2RegStore <= REG_STORE; --Actually write 
             
             ELSIF std_match(LDS_Rm_PR, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= REG_PR; --Write back to the Rn
+                SH2RegInSel <= REG_PR; --Write back to the PR
                 SH2RegStore <= REG_STORE; --Actually write 
             ELSIF std_match(JSR_Rm, InstructionReg) THEN
                 SH2RegIn <= StorePC; --Set what data needs to be written
-                SH2RegInSel <= REG_PR; --Write back to the Rn
+                SH2RegInSel <= REG_PR; --Write back to the PR
+                SH2RegStore <= REG_STORE; --Actually write 
+            ELSIF std_match(BSR_disp, InstructionReg) THEN
+                SH2RegIn <= StorePC; --Set what data needs to be written
+                SH2RegInSel <= REG_PR; --Write back to the PR
+                SH2RegStore <= REG_STORE; --Actually write 
+            ELSIF std_match(BSRF_Rm, InstructionReg) THEN
+                SH2RegIn <= StorePC; --Set what data needs to be written
+                SH2RegInSel <= REG_PR; --Write back to the PR
                 SH2RegStore <= REG_STORE; --Actually write 
 
             END IF;
