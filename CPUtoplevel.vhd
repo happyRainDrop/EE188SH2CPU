@@ -669,7 +669,31 @@ BEGIN
                     END IF;
 
                     IF (ClockTwo = '1') THEN
-                        PCLoadImmediate;
+                        IF std_match(JMP_Rm, MultiClockReg) THEN
+                            PCLoadImmediate;
+                        ELSIF std_match(JSR_Rm, InstructionReg) THEN
+                            PCLoadImmediate;
+                        ELSIF std_match(RTS, InstructionReg) THEN
+                            PCLoadImmediate;
+                        ELSIF std_match(BT_disp, InstructionReg)
+                            PCLoadImmediate;
+                        ELSIF std_match(BT_S_disp, InstructionReg)
+                            PCLoadImmediate;
+                        ELSIF std_match(BF_disp, InstructionReg)
+                            PCLoadImmediate;
+                        ELSIF std_match(BF_S_disp, InstructionReg)
+                            PCLoadImmediate;
+                        ELSIF std_match(BRA_disp, InstructionReg)
+                            PCLoadImmediate;
+                        ELSIF std_match(BRAF_disp, InstructionReg)
+                            PCLoadImmediate;
+                        ELSIF std_match(BSR_disp, InstructionReg)
+                            PCLoadImmediate;
+                        ELSIF std_match(BSRF_disp, InstructionReg)
+                            PCLoadImmediate;
+                        else
+                        END IF;
+                            
                     ELSE
                         
                     END IF;
@@ -1779,23 +1803,55 @@ BEGIN
                 MultiClockReg <= InstructionReg;
 
             ELSIF std_match(BF_disp, InstructionReg) THEN
-                ClockTwo <= '1';
+                SH2RegA1Sel <= REG_SR; 
+                IF RegArrayOutA1(0) = '0' THEN
+                    ClockTwo <= '1';
+                ELSE
+                   SetDefaultControlSignals;
+                END IF;
+
+            ELSIF std_match(BF_disp, InstructionReg) THEN
+                SH2RegA1Sel <= REG_SR; 
+                IF RegArrayOutA1(0) = '0' THEN
+                    ClockTwo <= '1';
+                ELSE
+                    SetDefaultControlSignals;
+            END IF;
 
             ELSIF std_match(RTE, InstructionReg) THEN
                 ClockTwo <= '1';
             ELSIF std_match(RTS, InstructionReg) THEN
                 ClockTwo <= '1';
+                SH2RegASel <= REG_PR; --Load the immediate address from register
+                DummyPc <= RegArrayOutA; --Store the register
+                MultiClockReg <= InstructionReg;
 
             ELSIF std_match(BT_disp, InstructionReg) THEN
+                SH2RegA1Sel <= REG_SR; 
+                IF RegArrayOutA1(0) = '1' THEN
+                    ClockTwo <= '1';
+                ELSE
+                   SetDefaultControlSignals
+                END IF;
+
                 ClockTwo <= '1';
             ELSIF std_match(BT_S_disp, InstructionReg) THEN
-                ClockTwo <= '1';
+                SH2RegA1Sel <= REG_SR; 
+                IF RegArrayOutA1(0) = '1' THEN
+                    ClockTwo <= '1';
+                ELSE
+                    SetDefaultControlSignals
+                END IF;   
+
             ELSIF std_match(BRA_disp, InstructionReg) THEN
                 ClockTwo <= '1';
-            ELSIF std_match(BRAF_disp, InstructionReg) THEN
+
+            ELSIF std_match(BRAF_disp, InstructionReg) THEN4
                 ClockTwo <= '1';
+
             ELSIF std_match(BSR_disp, InstructionReg) THEN
                 ClockTwo <= '1';
+
             ELSIF std_match(BSRF_disp, InstructionReg) THEN
                 ClockTwo <= '1';
 
@@ -1828,24 +1884,24 @@ BEGIN
                     ClockTwo <= '0'; --Reset the second clock
                 ELSIF std_match(BF_disp, InstructionReg) THEN
                     ClockTwo <= '0';
-    
+                    ClockThree <= '1';
                 ELSIF std_match(RTE, InstructionReg) THEN
-                    ClockTwo <= '1';
+                    ClockTwo <= '0';
                 ELSIF std_match(RTS, InstructionReg) THEN
-                    ClockTwo <= '1';
-    
+                    ClockTwo <= '0';
                 ELSIF std_match(BT_disp, InstructionReg) THEN
-                    ClockTwo <= '1';
+                    ClockTwo <= '0';
+                    ClockThree <= '1';
                 ELSIF std_match(BT_S_disp, InstructionReg) THEN
-                    ClockTwo <= '1';
+                    ClockTwo <= '0';
                 ELSIF std_match(BRA_disp, InstructionReg) THEN
-                    ClockTwo <= '1';
+                    ClockTwo <= '0';
                 ELSIF std_match(BRAF_disp, InstructionReg) THEN
-                    ClockTwo <= '1';
+                    ClockTwo <= '0';
                 ELSIF std_match(BSR_disp, InstructionReg) THEN
-                    ClockTwo <= '1';
+                    ClockTwo <= '0';
                 ELSIF std_match(BSRF_disp, InstructionReg) THEN
-                    ClockTwo <= '1';
+                    ClockTwo <= '0';
 
                 -- ==================================================================================================
                 -- ARITHMETIC
@@ -1884,6 +1940,12 @@ BEGIN
                     ELSIF std_match(XOR_B_imm_GBR, InstructionReg) THEN
                         ClockThree <= '0';
                     ELSIF std_match(TAS_B_Rn, InstructionReg) THEN
+                        ClockThree <= '0';
+                    ELSIF std_match(BT_disp, InstructionReg) THEN
+                        ClockThree <= '0';
+                    ELSIF std_match(BF_disp, InstructionReg) THEN
+                        ClockThree <= '0';
+
                     else
                     END IF;    
                 else
