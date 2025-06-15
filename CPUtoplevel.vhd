@@ -42,6 +42,7 @@
 --     11 June 25 Nerissa Finnen    Updated all Shift commands to new style
 --     12 June 25 Ruth Berkun       Implementing MOV commands (load and store)
 --     12 June 25 Ruth Berkun       JMP working and tested, also put GBR and VBR back into RegArray
+--     15 June 25 Ruth Berkun       Add LDS.L and STC.L (Pipeline halt logic)
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -191,6 +192,7 @@ PACKAGE SH2_CPU_Constants IS
     CONSTANT NO_READ_FROM_MEMORY : STD_LOGIC := '0';
     CONSTANT WORD_MASK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000011111111";
     CONSTANT BYTE_MASK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000001111111111111111";
+    CONSTANT SR_MASK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000001111110011";
 END SH2_CPU_Constants;
 
 LIBRARY ieee;
@@ -479,16 +481,21 @@ ARCHITECTURE Structural OF CPUtoplevel IS
     SIGNAL CurrentState : states;
 
     SIGNAL InstructionReg : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0) := (OTHERS => 'Z'); -- IR
-    SIGNAL PrevIR : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0) := (OTHERS => 'Z'); -- IR
+    SIGNAL LatchedIR : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0) := (OTHERS => 'Z'); -- IR
     SIGNAL ClockCounter : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); -- what clock cycle are we on?
 
+    -- Multi-clock and pipline signals
     SIGNAL MultiClockReg : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0); --Holds the multiclock instruction that is executed
-    SIGNAL ClockTwo : STD_LOGIC; --Clock cycle for multiclock instructions
-    SIGNAL ClockThree : STD_LOGIC; --Clock cycle for multiclock instructions
+    SIGNAL ClockTwo : STD_LOGIC := '0'; --Clock cycle for multiclock instructions
+    SIGNAL ClockThree : STD_LOGIC := '0'; --Clock cycle for multiclock instructions
     SIGNAL DummyPc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the new PC value to load
     SIGNAL StorePc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the old PC value to push to PR
     SIGNAL OffsetPc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the offset PC value to load
 
+    CONSTANT PIPELINE_HALT : STD_LOGIC := '1';
+    CONSTANT NO_PIPELINE_HALT : STD_LOGIC := '0';
+    SIGNAL PipelineHalt : STD_LOGIC := NO_PIPELINE_HALT; -- active high: 1 to halt, 0 to not halt
+    SIGNAL LatchedPipelineHalt : STD_LOGIC := NO_PIPELINE_HALT; -- clock-latched version of PipelineHalt
 BEGIN
 
     -- ================================================================================================== Entity Instantiations
@@ -542,7 +549,7 @@ BEGIN
             SH2DMAUIncDecSel => SH2DMAUIncDecSel,
             SH2DMAUIncDecBit => SH2DMAUIncDecBit,
             SH2DMAUPrePostSel => SH2DMAUPrePostSel,
-            SH2DataAddressBus => SH2CalculatedDataAddress, 
+            SH2DataAddressBus => SH2CalculatedDataAddress,
             SH2DataAddressSrc => DMAUPostIncDecSrc
         );
 
@@ -567,7 +574,7 @@ BEGIN
     -- ================================================================================================== Finite State Machine
     updatePCandIRandSetNextState : PROCESS (SH2clock)
         --========================================================== Procedures
-        PROCEDURE holdPC IS
+        PROCEDURE setPCZero IS
         BEGIN
             SH2PMAUSrcSel <= PMAU_SRC_SEL_IMM;
             SH2PMAUOffsetSel <= DEFAULT_OFFSET_SEL;
@@ -576,6 +583,18 @@ BEGIN
             SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
             PMAUImmediateSource <= DMAU_ZERO_IMM;
             PMAUImmediateOffset <= MAU_ZERO_OFFSET;
+        END PROCEDURE;
+
+        PROCEDURE holdPC IS
+        BEGIN
+            SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
+            SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_ZEROES;
+            SH2PMAUIncDecSel <= DEFAULT_INC_SEL;
+            SH2PMAUIncDecBit <= DEFAULT_BIT;
+            SH2PMAUPrePostSel <= MAU_POST_SEL;
+            PMAUImmediateSource <= DMAU_ZERO_IMM;
+            PMAUImmediateOffset <= MAU_ZERO_OFFSET;
+            SH2PC <= SH2PC_next;
         END PROCEDURE;
 
         PROCEDURE incPC IS
@@ -588,7 +607,6 @@ BEGIN
             PMAUImmediateSource <= DMAU_ZERO_IMM;
             PMAUImmediateOffset <= MAU_ZERO_OFFSET;
             SH2PC <= SH2PC_next;
-
         END PROCEDURE;
 
         PROCEDURE disableReadWrite IS
@@ -603,21 +621,21 @@ BEGIN
             RE3 <= '1';
         END PROCEDURE;
 
-        PROCEDURE PCLoadImmediate is
-        begin
-                SH2PMAUSrcSel <= PMAU_SRC_SEL_IMM;
-                SH2PMAUOffsetSel <= DEFAULT_OFFSET_SEL;
-                SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
-                SH2PMAUIncDecBit <= DEFAULT_BIT;
-                SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
-                PMAUImmediateSource <= DummyPc;
-                PMAUImmediateOffset <= MAU_ZERO_OFFSET;
-                SH2PC <= SH2PC_next;
-                
+        PROCEDURE PCLoadImmediate IS
+        BEGIN
+            SH2PMAUSrcSel <= PMAU_SRC_SEL_IMM;
+            SH2PMAUOffsetSel <= DEFAULT_OFFSET_SEL;
+            SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
+            SH2PMAUIncDecBit <= DEFAULT_BIT;
+            SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
+            PMAUImmediateSource <= DummyPc;
+            PMAUImmediateOffset <= MAU_ZERO_OFFSET;
+            SH2PC <= SH2PC_next;
+
         END PROCEDURE;
 
-        PROCEDURE PCLoadTwoXOffset is
-        begin
+        PROCEDURE PCLoadTwoXOffset IS
+        BEGIN
             SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
             SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_REG_OFFSET_x2;
             SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
@@ -628,17 +646,17 @@ BEGIN
             SH2PC <= SH2PC_next;
         END PROCEDURE;
 
-        PROCEDURE PCLoadRegisterOffset is
-            begin
-                SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
-                SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_REG_OFFSET_x1;
-                SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
-                SH2PMAUIncDecBit <= DEFAULT_BIT;
-                SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
-                PMAUImmediateSource <= DMAU_ZERO_IMM;
-                PMAUImmediateOffset <= OffsetPc;
-                SH2PC <= SH2PC_next;
-            END PROCEDURE;
+        PROCEDURE PCLoadRegisterOffset IS
+        BEGIN
+            SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
+            SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_REG_OFFSET_x1;
+            SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
+            SH2PMAUIncDecBit <= DEFAULT_BIT;
+            SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
+            PMAUImmediateSource <= DMAU_ZERO_IMM;
+            PMAUImmediateOffset <= OffsetPc;
+            SH2PC <= SH2PC_next;
+        END PROCEDURE;
 
     BEGIN
 
@@ -652,7 +670,7 @@ BEGIN
             CASE CurrentState IS
                 WHEN ZERO_CLK =>
 
-                    holdPC;
+                    setPCZero;
                     ------------------------------------------------ Update state
                     IF (Reset = '1') THEN
                         CurrentState <= FETCH_IR; -- CPU is enabled for the first time
@@ -674,7 +692,11 @@ BEGIN
                     RE2 <= '1';
                     RE3 <= '1'; -- Read low bytes in (instructions stored in low bytes)
                     ClockCounter <= ONE_CLOCK; --Set clock counter back to 1
-                    incPC;
+                    IF (PipelineHalt = NO_PIPELINE_HALT) THEN
+                        incPC;
+                    ELSE
+                        holdPC;
+                    END IF;
 
                     ------------------------------------------------ Set next state
                     IF (InstructionReg = "XXXXXXXXXXXXXXXX") THEN
@@ -684,7 +706,7 @@ BEGIN
                         -- For the next state: Set data, address buses to high impedance so that test bench can write them
                         SH2SelAddressBus <= OPEN_ADDRESS_BUS;
                         SH2SelDataBus <= HOLD_DATA_BUS;
-                    
+
                     ELSE
                         CurrentState <= FETCH_IR;
 
@@ -695,32 +717,32 @@ BEGIN
 
                     IF (ClockTwo = '1') THEN
                         IF std_match(JMP_Rm, MultiClockReg) THEN
-                            PCLoadImmediate;    --Load the Rm address to jump to
+                            PCLoadImmediate; --Load the Rm address to jump to
                         ELSIF std_match(JSR_Rm, MultiClockReg) THEN
-                            PCLoadImmediate;    --Load the Rm address to jump to 
+                            PCLoadImmediate; --Load the Rm address to jump to 
                         ELSIF std_match(RTS, MultiClockReg) THEN
-                            PCLoadImmediate;    --Load the PR address to jump back to
+                            PCLoadImmediate; --Load the PR address to jump back to
                         ELSIF std_match(BT_disp, MultiClockReg) THEN
-                            PCLoadImmediate;    --IDK
+                            PCLoadImmediate; --IDK
                         ELSIF std_match(BT_S_disp, MultiClockReg) THEN
-                            PCLoadTwoXOffset;    --Load the 2x displacement into offset to jump to; 
+                            PCLoadTwoXOffset; --Load the 2x displacement into offset to jump to; 
                         ELSIF std_match(BF_disp, MultiClockReg) THEN
-                            PCLoadImmediate;    --IDK
+                            PCLoadImmediate; --IDK
                         ELSIF std_match(BF_S_disp, MultiClockReg) THEN
-                            PCLoadTwoXOffset;    --Load the 2x displacement into offset to jump to
+                            PCLoadTwoXOffset; --Load the 2x displacement into offset to jump to
                         ELSIF std_match(BRA_disp, MultiClockReg) THEN
-                            PCLoadTwoXOffset;    --Load the 2x displacement into offset to jump to
+                            PCLoadTwoXOffset; --Load the 2x displacement into offset to jump to
                         ELSIF std_match(BRAF_Rm, MultiClockReg) THEN
                             PCLoadRegisterOffset;--Load the register displacement into offset to jump to
                         ELSIF std_match(BSR_disp, MultiClockReg) THEN
                             PCLoadRegisterOffset;--Load the register displacement into offset to jump to
                         ELSIF std_match(BSRF_Rm, MultiClockReg) THEN
-                            PCLoadImmediate;     --IDK
-                        else
+                            PCLoadImmediate; --IDK
+                        ELSE
                         END IF;
-                            
+
                     ELSE
-                        
+
                     END IF;
 
                 WHEN OTHERS => -- End of File or invalid state
@@ -915,6 +937,7 @@ BEGIN
 
         --Temproary variable to help with the subtractions with carrys
         VARIABLE SubCarryBus : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
+        VARIABLE forceDefaultControlSignals : STD_LOGIC := '0';
 
         PROCEDURE SetDefaultControlSignals IS
         BEGIN
@@ -956,6 +979,7 @@ BEGIN
         IF CurrentState = FETCH_IR THEN
             --Default all the units
             SetDefaultControlSignals;
+            forceDefaultControlSignals := '0';
 
             --  ==================================================================================================
             -- ARITHMETIC
@@ -1560,7 +1584,7 @@ BEGIN
 
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
                 SH2RegASel <= REG_GBR; -- Access GBR (expected to come out on Reg A1)
-                
+
                 -- Have DMAU sum the addresses from the registers
                 SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
                 DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
@@ -1694,7 +1718,7 @@ BEGIN
 
             ELSIF std_match(MOVW_R0_TO_atDispRn, InstructionReg) THEN
 
-                 -- Setting Reg Array control signals                                             
+                -- Setting Reg Array control signals                                             
                 SH2RegA2Sel <= 0; -- Access value at register R0 (at index m)
                 SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Access address inside register Rn (at index n)
 
@@ -1764,23 +1788,23 @@ BEGIN
                 SetDefaultControlSignals;
 
             ELSIF std_match(SETT, InstructionReg) THEN
-                SH2RegASel <= REG_SR;      --Summon the status register
+                SH2RegASel <= REG_SR; --Summon the status register
                 --Setting ALU control signals
                 SH2FCmd <= "1100"; --Use OpA
                 SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
             ELSIF std_match(LDC_Rm_SR, InstructionReg) THEN
-                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 0)));      --Summon the status register
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 0))); --Summon the status register
                 --Setting ALU control signals
                 SH2FCmd <= "1100"; --Use OpA
                 SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
             ELSIF std_match(STC_SR_Rn, InstructionReg) THEN
-                SH2RegASel <= REG_SR;      --Summon the status register
+                SH2RegASel <= REG_SR; --Summon the status register
                 --Setting ALU control signals
                 SH2FCmd <= "1100"; --Use OpA
                 SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
-            
+
             ELSIF std_match(JMP_Rm, InstructionReg) THEN
-                ClockTwo <= '1';    --Set up for the second clock
+                ClockTwo <= '1'; --Set up for the second clock
                 SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Load the immediate address from register
                 DummyPc <= RegArrayOutA; --Store the register
                 MultiClockReg <= InstructionReg;
@@ -1801,48 +1825,46 @@ BEGIN
                 --Setting ALU control signals
                 SH2FCmd <= "1100"; --Use OpA
                 SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
-            
+
             ELSIF std_match(LDC_Rm_GBR, InstructionReg) THEN
-                SH2RegASel <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
                 --Setting ALU control signals
                 SH2FCmd <= "1100"; --Use OpA
                 SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
-            
+
             ELSIF std_match(LDC_Rm_VBR, InstructionReg) THEN
-                SH2RegASel <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
                 --Setting ALU control signals
                 SH2FCmd <= "1100"; --Use OpA
                 SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
-            
+
             ELSIF std_match(LDS_Rm_PR, InstructionReg) THEN
-                SH2RegASel <= to_integer(unsigned(InstructionReg(11 downto 8)));
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
                 --Setting ALU control signals
                 SH2FCmd <= "1100"; --Use OpA
                 SH2CinCmd <= ALU_FB_SEL; --Select the OpA output
-            
+
             ELSIF std_match(JSR_Rm, InstructionReg) THEN
                 ClockTwo <= '1';
                 SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Load the immediate address from register
                 DummyPc <= RegArrayOutA; --Store the register
                 StorePC <= SH2PC;
                 MultiClockReg <= InstructionReg;
-
-
-    --=================================================================
-    --WAITTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTt 
-    --=================================================================  
+                --=================================================================
+                --WAITTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTt 
+                --=================================================================  
             ELSIF std_match(BF_disp, InstructionReg) THEN
-                SH2RegA1Sel <= REG_SR; 
+                SH2RegA1Sel <= REG_SR;
                 IF RegArrayOutA1(0) = '0' THEN
                     ClockTwo <= '1';
                 ELSE
-                   SetDefaultControlSignals;
+                    SetDefaultControlSignals;
                 END IF;
 
             ELSIF std_match(BF_S_disp, InstructionReg) THEN
-                SH2RegA1Sel <= REG_SR; 
+                SH2RegA1Sel <= REG_SR;
                 IF RegArrayOutA1(0) = '0' THEN
-                    ClockTwo <= '1';                
+                    ClockTwo <= '1';
                     OffsetPc <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
                     MultiClockReg <= InstructionReg;
                 ELSE
@@ -1856,29 +1878,27 @@ BEGIN
                 SH2RegASel <= REG_PR; --Load the immediate address from register
                 DummyPc <= RegArrayOutA; --Store the register
                 MultiClockReg <= InstructionReg;
-
-
-    --=================================================================
-    --WAITTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTt
-    --=================================================================
+                --=================================================================
+                --WAITTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTt
+                --=================================================================
             ELSIF std_match(BT_disp, InstructionReg) THEN
-                SH2RegA1Sel <= REG_SR; 
+                SH2RegA1Sel <= REG_SR;
                 IF RegArrayOutA1(0) = '1' THEN
                     ClockTwo <= '1';
                 ELSE
-                   SetDefaultControlSignals;
+                    SetDefaultControlSignals;
                 END IF;
 
                 ClockTwo <= '1';
             ELSIF std_match(BT_S_disp, InstructionReg) THEN
-                SH2RegA1Sel <= REG_SR; 
+                SH2RegA1Sel <= REG_SR;
                 IF RegArrayOutA1(0) = '1' THEN
                     ClockTwo <= '1';
                     OffsetPc <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
                     MultiClockReg <= InstructionReg;
                 ELSE
                     SetDefaultControlSignals;
-                END IF;   
+                END IF;
 
             ELSIF std_match(BRA_disp, InstructionReg) THEN
                 ClockTwo <= '1';
@@ -1904,9 +1924,9 @@ BEGIN
                 StorePC <= SH2PC; --Store the PC to PR later
                 MultiClockReg <= InstructionReg; --Record the multiclock instruction for future reference
 
-            -- ==================================================================================================
-            -- ARITHMETIC
-            -- ==================================================================================================
+                -- ==================================================================================================
+                -- ARITHMETIC
+                -- ==================================================================================================
             ELSIF std_match(AND_B_imm_GBR, InstructionReg) THEN
                 ClockTwo <= '1';
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
@@ -1914,7 +1934,7 @@ BEGIN
                 SH2RegA2Sel <= 0; --Load the displacement from register R0
 
                 -- Have DMAU sum the addresses from the registers
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;  --Select the GBR register input
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG; --Select the GBR register input
                 DMAUImmediateOffset <= RegArrayOutA2; --displacement in register R0
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1; --add the displacement from R0
 
@@ -1927,24 +1947,24 @@ BEGIN
                 SH2RegA2Sel <= 0; --Load the displacement from register R0
 
                 -- Have DMAU sum the addresses from the registers
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;  --Select the GBR register input
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG; --Select the GBR register input
                 DMAUImmediateOffset <= RegArrayOutA2; --displacement in register R0
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1; --add the displacement from R0
 
                 ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
             ELSIF std_match(TST_B_imm_GBR, InstructionReg) THEN
                 ClockTwo <= '1';
-                                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
                 SH2RegASel <= REG_GBR; -- Access GBR (expected to come out on Reg A)
                 SH2RegA2Sel <= 0; --Load the displacement from register R0
 
                 -- Have DMAU sum the addresses from the registers
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;  --Select the GBR register input
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG; --Select the GBR register input
                 DMAUImmediateOffset <= RegArrayOutA2; --displacement in register R0
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1; --add the displacement from R0
 
                 ReadFromMemoryB <= READ_FROM_MEMORY; -- prepare for read
-                
+
             ELSIF std_match(XOR_B_imm_GBR, InstructionReg) THEN
                 ClockTwo <= '1';
                 -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
@@ -1952,7 +1972,7 @@ BEGIN
                 SH2RegA2Sel <= 0; --Load the displacement from register R0
 
                 -- Have DMAU sum the addresses from the registers
-                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;  --Select the GBR register input
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG; --Select the GBR register input
                 DMAUImmediateOffset <= RegArrayOutA2; --displacement in register R0
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1; --add the displacement from R0
 
@@ -1960,8 +1980,14 @@ BEGIN
 
             ELSIF std_match(TAS_B_Rn, InstructionReg) THEN
                 ClockTwo <= '1';
-            ELSE    
-
+                --===========================
+                -- System Register Control
+                --===========================
+            ELSIF std_match(STC_L_SR_Rn, InstructionReg) THEN
+                MultiClockReg <= InstructionReg;
+                ClockTwo <= '1';
+                PipelineHalt <= PIPELINE_HALT;
+            ELSE
                 SetDefaultControlSignals;
 
             END IF;
@@ -1971,14 +1997,14 @@ BEGIN
             -- ==================================================================================================
             IF (ClockTwo = '1') THEN
                 IF std_match(JMP_Rm, MultiClockReg) THEN
-                    ClockTwo <= '0'; 
+                    ClockTwo <= '0';
                 ELSIF std_match(JSR_Rm, MultiClockReg) THEN
-                    ClockTwo <= '0'; 
+                    ClockTwo <= '0';
                 ELSIF std_match(BF_disp, MultiClockReg) THEN
-                    ClockTwo <= '0'; 
+                    ClockTwo <= '0';
                     ClockThree <= '1'; --Set the third clock
                 ELSIF std_match(RTE, MultiClockReg) THEN
-                    ClockTwo <= '0'; 
+                    ClockTwo <= '0';
                 ELSIF std_match(RTS, MultiClockReg) THEN
                     ClockTwo <= '0';
                 ELSIF std_match(BT_disp, MultiClockReg) THEN
@@ -1995,9 +2021,9 @@ BEGIN
                 ELSIF std_match(BSRF_Rm, MultiClockReg) THEN
                     ClockTwo <= '0';
 
-                -- ==================================================================================================
-                -- ARITHMETIC
-                -- ==================================================================================================
+                    -- ==================================================================================================
+                    -- ARITHMETIC
+                    -- ==================================================================================================
                 ELSIF std_match(AND_B_imm_GBR, MultiClockReg) THEN
                     ClockTwo <= '0';
                     ClockThree <= '1'; --Set the third clock
@@ -2013,6 +2039,14 @@ BEGIN
                 ELSIF std_match(TAS_B_Rn, MultiClockReg) THEN
                     ClockTwo <= '0';
                     ClockThree <= '1'; --Set the third clock
+                    -- =========================
+                    -- System Register Control
+                    -- =========================
+                ELSIF std_match(STC_L_SR_Rn, MultiClockReg) THEN
+                    -- this is the last clock cycle of this instruction
+                    ClockTwo <= '0';
+                    --MultiClockReg <= (OTHERS => '0');
+                    PipelineHalt <= NO_PIPELINE_HALT;
                 ELSE
                 END IF;
 
@@ -2020,9 +2054,9 @@ BEGIN
                 -- Third Clock Cycle Reset
                 -- ==================================================================================================
                 IF (ClockThree = '1') THEN
-                -- ==================================================================================================
-                -- ARITHMETIC
-                -- ==================================================================================================
+                    -- ==================================================================================================
+                    -- ARITHMETIC
+                    -- ==================================================================================================
                     IF std_match(AND_B_imm_GBR, MultiClockReg) THEN
                         ClockThree <= '0';
                     ELSIF std_match(OR_B_imm_GBR, MultiClockReg) THEN
@@ -2038,11 +2072,17 @@ BEGIN
                     ELSIF std_match(BF_disp, MultiClockReg) THEN
                         ClockThree <= '0';
 
-                    else
-                    END IF;    
-                else
+                    ELSE
+                    END IF;
+                ELSE
                 END IF;
             END IF;
+
+            -- Pipeline forces a NOP to delay execution/pre-calculation execution
+            if (LatchedPipelineHalt = PIPELINE_HALT) then
+                setDefaultControlSignals;
+            end if;
+                
 
         END IF;
     END PROCESS matchInstruction;
@@ -2100,10 +2140,14 @@ BEGIN
         END PROCEDURE;
 
     BEGIN
-        IF CurrentState = FETCH_IR AND rising_edge(SH2Clock) THEN
+
+        IF rising_edge(SH2Clock) THEN
+            LatchedPipelineHalt <= PipelineHalt;
+        END IF;
+
+        IF CurrentState = FETCH_IR AND rising_edge(SH2Clock) AND LatchedPipelineHalt = NO_PIPELINE_HALT THEN
 
             SetDefaultExecuteSignals;
-
             --  ==================================================================================================
             -- ARITHMETIC
             -- ==================================================================================================
@@ -2207,13 +2251,13 @@ BEGIN
                 SH2RegStore <= REG_STORE;
 
             ELSIF std_match(InstructionReg, EXTS_B_Rm_Rn) THEN
-                SignExtBus := (regLen - 1 downto 8 => SH2ALUResult(7)) & SH2ALUResult(7 downto 0);
+                SignExtBus := (regLen - 1 DOWNTO 8 => SH2ALUResult(7)) & SH2ALUResult(7 DOWNTO 0);
                 SH2RegIn <= SignExtBus; --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;
 
             ELSIF std_match(InstructionReg, EXTS_W_Rm_Rn) THEN
-                SignExtBus := (regLen - 1 downto 16 => SH2ALUResult(15)) & SH2ALUResult(15 downto 0);   
+                SignExtBus := (regLen - 1 DOWNTO 16 => SH2ALUResult(15)) & SH2ALUResult(15 DOWNTO 0);
                 SH2RegIn <= SignExtBus; --Set what data needs to be written
                 SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
                 SH2RegStore <= REG_STORE;
@@ -2378,8 +2422,8 @@ BEGIN
                 --  ==================================================================================================
                 -- SHIFTS (0/8) : Needs testing
                 --  ==================================================================================================
-            
-                ELSIF std_match(SHLL_Rn, InstructionReg) THEN
+
+            ELSIF std_match(SHLL_Rn, InstructionReg) THEN
                 -- Setting Reg Array control signals
                 FlagUpdate := RegArrayOutA2;
 
@@ -2728,9 +2772,9 @@ BEGIN
             ELSIF std_match(MOV_W_GBR_R0, InstructionReg) THEN
             ELSIF std_match(MOV_L_GBR_R0, InstructionReg) THEN
 
-            --========================================
-            -- System control
-            --========================================
+                --========================================
+                -- System control
+                --========================================
             ELSIF std_match(SETT, InstructionReg) THEN
                 FlagUpdate := SH2ALUResult;
                 FlagUpdate(0) := '1';
@@ -2745,32 +2789,32 @@ BEGIN
 
             ELSIF std_match(STC_SR_Rn, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); --Write back to the Rn
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
                 SH2RegStore <= REG_STORE; --Actually write 
             ELSIF std_match(STC_GBR_Rn, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); --Write back to the Rn
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
                 SH2RegStore <= REG_STORE; --Actually write 
 
             ELSIF std_match(STC_VBR_Rn, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); --Write back to the Rn
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
                 SH2RegStore <= REG_STORE; --Actually write 
 
             ELSIF std_match(STS_PR_Rn, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 downto 8))); --Write back to the Rn
+                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
                 SH2RegStore <= REG_STORE; --Actually write 
             ELSIF std_match(LDC_Rm_GBR, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
                 SH2RegInSel <= REG_GBR; --Write back to the GBR
                 SH2RegStore <= REG_STORE; --Actually write 
-            
+
             ELSIF std_match(LDC_Rm_VBR, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
                 SH2RegInSel <= REG_VBR; --Write back to the VBR
                 SH2RegStore <= REG_STORE; --Actually write 
-            
+
             ELSIF std_match(LDS_Rm_PR, InstructionReg) THEN
                 SH2RegIn <= SH2ALUResult; --Set what data needs to be written
                 SH2RegInSel <= REG_PR; --Write back to the PR
@@ -2787,7 +2831,10 @@ BEGIN
                 SH2RegIn <= StorePC; --Set what data needs to be written
                 SH2RegInSel <= REG_PR; --Write back to the PR
                 SH2RegStore <= REG_STORE; --Actually write 
-
+                -- ================================
+                -- System Register Control
+                -- =================================
+            ELSIF std_match(STC_L_SR_Rn, InstructionReg) AND ClockTwo = '1' THEN
             END IF;
 
         END IF;
