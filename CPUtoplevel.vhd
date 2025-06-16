@@ -1417,12 +1417,75 @@ BEGIN
                 SH2FCmd <= "0011";
                 SH2ALUCmd <= ALU_FB_SEL;
 
+                --  =====================================================================================
+                --  REGISTER SWAPPING
+                --  ======================================================================================
+            ELSIF std_match(SWAP_B_Rm_Rn, InstructionReg) THEN
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Data from Rm (at index m)
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Data from Rn (at index n)
+
+            ELSIF std_match(SWAP_W_Rm_Rn, InstructionReg) THEN
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Data from Rm (at index m)
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Data from Rn (at index n)
+
+            ELSIF std_match(XTRCT_Rm_Rn, InstructionReg) THEN
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Data from Rm (at index m)
+                SH2RegA2Sel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Data from Rn (at index n)
+
                 --  ==================================================================================================
                 -- LOAD
                 --  ==================================================================================================
                 -- Load immediate
             ELSIF std_match(MOV_IMM_TO_Rn, InstructionReg) THEN
                 -- Nothing to precalculate here. We'll do the loading in the execute stage.
+
+                -- Load immediate from register
+            ELSIF std_match(MOV_Rm_TO_Rn, InstructionReg) THEN
+                SH2RegASel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Data from Rm (at index m)
+
+                -- Load from codespace
+            ELSIF std_match(MOV_W_PC_DISP_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: PC
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_IMM;
+                DMAUImmediateSource <= SH2PC;   -- Access address inside PC
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
+
+                ReadFromMemoryW <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOV_L_PC_DISP_TO_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals: PC
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_IMM;
+                DMAUImmediateSource <= SH2PC;   -- Access address inside PC
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(MOVA_PC_R0, InstructionReg) THEN
+                -- Setting Reg Array control signals: PC
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_IMM;
+                DMAUImmediateSource <= SH2PC;   -- Access address inside PC
+                DMAUImmediateOffset <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x1;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
+                -- Load T bit into Rn
+            ELSIF std_match(MOVT_Rn, InstructionReg) THEN
+                SH2RegASel <= REG_SR; -- access SR for T bit
+
+                -- Load from PR
+            ELSIF std_match(LDS_L_Rm_PR, InstructionReg) THEN
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
 
                 -- Load from reg address directly
             ELSIF std_match(MOVB_atRm_TO_Rn, InstructionReg) THEN
@@ -1782,6 +1845,19 @@ BEGIN
                 SH2DMAUOffsetSel <= DMAU_OFFSET_SEL_IMM_OFFSET_x4;
 
                 WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write
+
+                --Store into PR
+            ELSIF std_match(STS_L_PR_Rn, InstructionReg) THEN
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= REG_PR; -- Access value at register PR
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU pre-decrement the address from the register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_DEC_SEL;
+                SH2DMAUPrePostSel <= MAU_PRE_SEL;
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write                
 
                 --  ==================================================================================================
                 -- SYSTEM CONTROL
@@ -2714,6 +2790,30 @@ BEGIN
                     SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
                     SH2RegStore <= REG_STORE;
 
+                    --  =====================================================================================
+                    --  REGISTER SWAPPING
+                    --  ======================================================================================
+                ELSIF std_match(SWAP_B_Rm_Rn, InstructionReg) THEN
+                    -- Of the lower word: swap upper and lower bytes in Rm, upper word stays the same
+                    -- Store swapped Rm into Rn (Rm data popped out on RegA)
+                    SH2RegIn <= RegArrayOutA(31 downto 16) & RegArrayOutA(7 downto 0) & RegArrayOutA(15 downto 8);
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+                    
+                ELSIF std_match(SWAP_W_Rm_Rn, InstructionReg) THEN
+                    -- Swap upper and lower words of Rm, store in Rn
+                    SH2RegIn <= RegArrayOutA(15 downto 0) & RegArrayOutA(31 downto 16);
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+            
+
+                ELSIF std_match(XTRCT_Rm_Rn, InstructionReg) THEN
+                    -- Take lower word of Rm, upper word of Rn, store into Rn
+                    SH2RegIn <= RegArrayOutA(15 downto 0) & RegArrayOutA2(31 downto 16);
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+
                     --  ==================================================================================================
                     -- LOAD
                     --  ==================================================================================================
@@ -2725,6 +2825,51 @@ BEGIN
                     SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(7 DOWNTO 0)), regLen)); -- sign-extended immediate
                     SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
                     SH2RegStore <= REG_STORE;
+
+                    -- Load immediate from register
+                ELSIF std_match(MOV_Rm_TO_Rn, InstructionReg) THEN
+                    -- Store Rm data into Rn
+                    SH2RegIn <= RegArrayOutA;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;    
+
+                    -- Load from codespace
+                ELSIF std_match(MOV_W_PC_DISP_TO_Rn, InstructionReg) THEN
+                    -- Store data bus data into Rn
+                    SH2RegIn <= SH2DataBus;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOV_L_PC_DISP_TO_Rn, InstructionReg) THEN
+                    -- Store data bus data into Rn
+                    SH2RegIn <= SH2DataBus;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOVA_PC_R0, InstructionReg) THEN
+                    -- Store data bus data into R0
+                    SH2RegIn <= SH2DataBus;
+                    SH2RegInSel <= 0; -- Store inside register R0
+                    SH2RegStore <= REG_STORE;
+
+                    -- Load T bit into Rn
+                ELSIF std_match(MOVT_Rn, InstructionReg) THEN
+                    -- Store zero-padded T bit into Rn
+                    SH2RegIn <= (regLen-1 downto 1 => '0') & RegArrayOutA(0);
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;  
+
+                    -- Load from PR
+                ELSIF std_match(LDS_L_Rm_PR, InstructionReg) THEN    
+                    -- Store data bus data into PR
+                    SH2RegIn <= SH2DataBus;
+                    SH2RegInSel <= REG_PR;
+                    SH2RegStore <= REG_STORE;
+
+                    -- Store new calculated address into Rm
+                    SH2RegAxIn <= DMAUPostIncDecSrc;
+                    SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
+                    SH2RegAxStore <= REG_STORE;          
 
                     -- Load from reg address directly
                 ELSIF std_match(MOVB_atRm_TO_Rn, InstructionReg) THEN
@@ -2895,6 +3040,13 @@ BEGIN
                 ELSIF std_match(MOV_B_GBR_R0, InstructionReg) THEN
                 ELSIF std_match(MOV_W_GBR_R0, InstructionReg) THEN
                 ELSIF std_match(MOV_L_GBR_R0, InstructionReg) THEN
+
+                    -- Store into PR
+                ELSIF std_match(STS_L_PR_Rn, InstructionReg) THEN
+                    -- Update Rn with pre-decremented address
+                    SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                    SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
+                    SH2RegAxStore <= REG_STORE;
 
                     --========================================
                     -- System control
