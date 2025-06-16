@@ -43,6 +43,9 @@
 --     12 June 25 Ruth Berkun       Implementing MOV commands (load and store)
 --     12 June 25 Ruth Berkun       JMP working and tested, also put GBR and VBR back into RegArray
 --     15 June 25 Ruth Berkun       Add LDS.L and STC.L (Pipeline halt logic)
+--     16 June 25 Ruth Berkun       Tested LDS.L and STC.L, required ClockTwo and ClockThree to be latched
+--                                  (checking the versions of ClockTwo and ClockThree that only update on rising edge of 
+--                                   next clock)
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
@@ -2002,6 +2005,44 @@ BEGIN
 
                 WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write 
 
+            ELSIF std_match(STC_L_GBR_Rn, InstructionReg) THEN
+                -- Prepare to halt the pipeline to prevent other instr from writing SR
+                MultiClockReg <= InstructionReg;
+                ClockTwo <= '1';
+                PipelineHalt <= PIPELINE_HALT;
+
+                -- Prepare to grab the SR value to write to memory
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= REG_GBR; -- Access value at SR
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU pre-decrement the address from the register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_DEC_SEL;
+                SH2DMAUPrePostSel <= MAU_PRE_SEL;
+                SH2DMAUIncDecBit <= 2; -- predecrement by 4
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write 
+            
+            ELSIF std_match(STC_L_VBR_Rn, InstructionReg) THEN
+                -- Prepare to halt the pipeline to prevent other instr from writing SR
+                MultiClockReg <= InstructionReg;
+                ClockTwo <= '1';
+                PipelineHalt <= PIPELINE_HALT;
+
+                -- Prepare to grab the SR value to write to memory
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= REG_VBR; -- Access value at SR
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU pre-decrement the address from the register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_DEC_SEL;
+                SH2DMAUPrePostSel <= MAU_PRE_SEL;
+                SH2DMAUIncDecBit <= 2; -- predecrement by 4
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write 
+
             ELSIF std_match(LDC_L_Rm_SR, InstructionReg) THEN
                 -- Prepare to halt the pipeline to prevent other instr from writing SR
                 MultiClockReg <= InstructionReg;
@@ -2019,6 +2060,43 @@ BEGIN
                 SH2DMAUIncDecBit <= 2; -- post increment by 4
 
                 ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(LDC_L_Rm_GBR, InstructionReg) THEN
+                -- Prepare to halt the pipeline to prevent other instr from writing SR
+                MultiClockReg <= InstructionReg;
+                ClockTwo <= '1';
+                PipelineHalt <= PIPELINE_HALT;
+
+                -- Prepare to read @Rm into SR
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
+                SH2DMAUIncDecBit <= 2; -- post increment by 4
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
+            ELSIF std_match(LDC_L_Rm_VBR, InstructionReg) THEN
+                -- Prepare to halt the pipeline to prevent other instr from writing SR
+                MultiClockReg <= InstructionReg;
+                ClockTwo <= '1';
+                PipelineHalt <= PIPELINE_HALT;
+
+                -- Prepare to read @Rm into SR
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
+                SH2DMAUIncDecBit <= 2; -- post increment by 4
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
+
             ELSE
                 SetDefaultControlSignals;
 
@@ -2891,6 +2969,18 @@ BEGIN
                 SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
                 SH2RegAxInSel <= to_integer(unsigned(MultiClockReg(11 DOWNTO 8))); -- Store inside register Rn
                 SH2RegAxStore <= REG_STORE;
+            
+            ELSIF std_match(STC_L_GBR_Rn, MultiClockReg) AND ClockTwo = '1' THEN
+                -- Update Rn with pre-decremented address
+                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                SH2RegAxInSel <= to_integer(unsigned(MultiClockReg(11 DOWNTO 8))); -- Store inside register Rn
+                SH2RegAxStore <= REG_STORE;
+
+            ELSIF std_match(STC_L_VBR_Rn, MultiClockReg) AND ClockTwo = '1' THEN
+                -- Update Rn with pre-decremented address
+                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                SH2RegAxInSel <= to_integer(unsigned(MultiClockReg(11 DOWNTO 8))); -- Store inside register Rn
+                SH2RegAxStore <= REG_STORE;
 
             ELSIF std_match(LDC_L_Rm_SR, MultiClockReg) AND ClockTwo = '1' THEN
                 -- Update SR with loaded-from-memory value
@@ -2903,6 +2993,31 @@ BEGIN
                 SH2RegAxIn <= DMAUPostIncDecSrc;
                 SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rm
                 SH2RegAxStore <= REG_STORE;
+
+            ELSIF std_match(LDC_L_Rm_GBR, MultiClockReg) AND ClockTwo = '1' THEN
+                -- Update SR with loaded-from-memory value
+                -- Store data bus data into Rn
+                SH2RegIn <= SH2DataBus;
+                SH2RegInSel <= REG_GBR; -- Store inside SR
+                SH2RegStore <= REG_STORE;
+
+                -- Store new calculated address into Rm
+                SH2RegAxIn <= DMAUPostIncDecSrc;
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rm
+                SH2RegAxStore <= REG_STORE;
+
+            ELSIF std_match(LDC_L_Rm_VBR, MultiClockReg) AND ClockTwo = '1' THEN
+                -- Update SR with loaded-from-memory value
+                -- Store data bus data into Rn
+                SH2RegIn <= SH2DataBus;
+                SH2RegInSel <= REG_VBR; -- Store inside SR
+                SH2RegStore <= REG_STORE;
+
+                -- Store new calculated address into Rm
+                SH2RegAxIn <= DMAUPostIncDecSrc;
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rm
+                SH2RegAxStore <= REG_STORE;
+
             END IF;
 
 
