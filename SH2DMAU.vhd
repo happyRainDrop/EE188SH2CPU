@@ -39,7 +39,7 @@ package SH2DMAUConstants is
 
   -- Register and word size configuration
   constant regLen       : integer := 32;   -- Each register is 32 bits
-  constant regCount     : integer := 18;   -- 16 general + 2 special registers
+  constant regCount     : integer := 20;   -- 16 general + 4 special registers
 
   -- DMAU configuration
   constant dmauSourceCount  : integer := 4;    -- from reg array, GBR, VBR, or immediate

@@ -488,6 +488,8 @@ ARCHITECTURE Structural OF CPUtoplevel IS
     SIGNAL MultiClockReg : STD_LOGIC_VECTOR(instrLen - 1 DOWNTO 0); --Holds the multiclock instruction that is executed
     SIGNAL ClockTwo : STD_LOGIC := '0'; --Clock cycle for multiclock instructions
     SIGNAL ClockThree : STD_LOGIC := '0'; --Clock cycle for multiclock instructions
+    SIGNAL LatchedClockTwo : STD_LOGIC := '0';
+    SIGNAL LatchedClockThree : STD_LOGIC := '0';
     SIGNAL DummyPc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the new PC value to load
     SIGNAL StorePc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the old PC value to push to PR
     SIGNAL OffsetPc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the offset PC value to load
@@ -937,7 +939,6 @@ BEGIN
 
         --Temproary variable to help with the subtractions with carrys
         VARIABLE SubCarryBus : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0) := (OTHERS => '0');
-        VARIABLE forceDefaultControlSignals : STD_LOGIC := '0';
 
         PROCEDURE SetDefaultControlSignals IS
         BEGIN
@@ -979,7 +980,6 @@ BEGIN
         IF CurrentState = FETCH_IR THEN
             --Default all the units
             SetDefaultControlSignals;
-            forceDefaultControlSignals := '0';
 
             --  ==================================================================================================
             -- ARITHMETIC
@@ -1984,18 +1984,58 @@ BEGIN
                 -- System Register Control
                 --===========================
             ELSIF std_match(STC_L_SR_Rn, InstructionReg) THEN
+                -- Prepare to halt the pipeline to prevent other instr from writing SR
                 MultiClockReg <= InstructionReg;
                 ClockTwo <= '1';
                 PipelineHalt <= PIPELINE_HALT;
+
+                -- Prepare to grab the SR value to write to memory
+                -- Setting Reg Array control signals                                             
+                SH2RegA2Sel <= REG_SR; -- Access value at SR
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rn (at index n)
+
+                -- Have DMAU pre-decrement the address from the register
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_DEC_SEL;
+                SH2DMAUPrePostSel <= MAU_PRE_SEL;
+                SH2DMAUIncDecBit <= 2; -- predecrement by 4
+
+                WriteToMemoryL <= WRITE_TO_MEMORY; -- prepare for write 
+
+            ELSIF std_match(LDC_L_Rm_SR, InstructionReg) THEN
+                -- Prepare to halt the pipeline to prevent other instr from writing SR
+                MultiClockReg <= InstructionReg;
+                ClockTwo <= '1';
+                PipelineHalt <= PIPELINE_HALT;
+
+                -- Prepare to read @Rm into SR
+                -- Setting Reg Array control signals: RegA = Reg source, RegB = Reg offset source                                             
+                SH2RegASel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Access address inside register Rm (at index m)
+
+                -- Have DMAU post-increment the address
+                SH2DMAUSrcSel <= DMAU_SRC_SEL_REG;
+                SH2DMAUIncDecSel <= MAU_INC_SEL;
+                SH2DMAUPrePostSel <= MAU_POST_SEL;
+                SH2DMAUIncDecBit <= 2; -- post increment by 4
+
+                ReadFromMemoryL <= READ_FROM_MEMORY; -- prepare for read
             ELSE
                 SetDefaultControlSignals;
 
             END IF;
 
-            -- ==================================================================================================
-            -- Second Clock Cycle Reset
-            -- ==================================================================================================
-            IF (ClockTwo = '1') THEN
+            -- Pipeline forces a NOP to delay execution/pre-calculation execution
+            -- of the one-clock instruction
+            -- Moved before "second clock reset" so we don't accidently overwrite any
+            -- of the signals from there.
+            IF (LatchedPipelineHalt = PIPELINE_HALT) THEN
+                setDefaultControlSignals;
+            END IF;
+
+                -- ==================================================================================================
+                -- Second Clock Cycle Reset
+                -- ==================================================================================================
+            IF (LatchedClockTwo = '1') THEN
                 IF std_match(JMP_Rm, MultiClockReg) THEN
                     ClockTwo <= '0';
                 ELSIF std_match(JSR_Rm, MultiClockReg) THEN
@@ -2045,44 +2085,46 @@ BEGIN
                 ELSIF std_match(STC_L_SR_Rn, MultiClockReg) THEN
                     -- this is the last clock cycle of this instruction
                     ClockTwo <= '0';
-                    --MultiClockReg <= (OTHERS => '0');
                     PipelineHalt <= NO_PIPELINE_HALT;
-                ELSE
-                END IF;
 
-                -- ==================================================================================================
-                -- Third Clock Cycle Reset
-                -- ==================================================================================================
-                IF (ClockThree = '1') THEN
-                    -- ==================================================================================================
-                    -- ARITHMETIC
-                    -- ==================================================================================================
-                    IF std_match(AND_B_imm_GBR, MultiClockReg) THEN
-                        ClockThree <= '0';
-                    ELSIF std_match(OR_B_imm_GBR, MultiClockReg) THEN
-                        ClockThree <= '0';
-                    ELSIF std_match(TST_B_imm_GBR, MultiClockReg) THEN
-                        ClockThree <= '0';
-                    ELSIF std_match(XOR_B_imm_GBR, MultiClockReg) THEN
-                        ClockThree <= '0';
-                    ELSIF std_match(TAS_B_Rn, MultiClockReg) THEN
-                        ClockThree <= '0';
-                    ELSIF std_match(BT_disp, MultiClockReg) THEN
-                        ClockThree <= '0';
-                    ELSIF std_match(BF_disp, MultiClockReg) THEN
-                        ClockThree <= '0';
-
-                    ELSE
-                    END IF;
+                ELSIF std_match(LDC_L_Rm_SR, MultiClockReg) THEN
+                    -- Clock update stuff
+                    ClockTwo <= '0';
+                    ClockThree <= '1';
                 ELSE
                 END IF;
             END IF;
 
-            -- Pipeline forces a NOP to delay execution/pre-calculation execution
-            if (LatchedPipelineHalt = PIPELINE_HALT) then
-                setDefaultControlSignals;
-            end if;
-                
+                -- ==================================================================================================
+                -- Third Clock Cycle Reset
+                -- ==================================================================================================
+            IF (LatchedClockThree = '1') THEN
+                -- ==================================================================================================
+                -- ARITHMETIC
+                -- ==================================================================================================
+                IF std_match(AND_B_imm_GBR, MultiClockReg) THEN
+                    ClockThree <= '0';
+                ELSIF std_match(OR_B_imm_GBR, MultiClockReg) THEN
+                    ClockThree <= '0';
+                ELSIF std_match(TST_B_imm_GBR, MultiClockReg) THEN
+                    ClockThree <= '0';
+                ELSIF std_match(XOR_B_imm_GBR, MultiClockReg) THEN
+                    ClockThree <= '0';
+                ELSIF std_match(TAS_B_Rn, MultiClockReg) THEN
+                    ClockThree <= '0';
+                ELSIF std_match(BT_disp, MultiClockReg) THEN
+                    ClockThree <= '0';
+                ELSIF std_match(BF_disp, MultiClockReg) THEN
+                    ClockThree <= '0';
+
+                ELSIF std_match(LDC_L_Rm_SR, MultiClockReg) THEN
+                    -- last clock: unpause pipeline
+                    ClockTwo <= '0';
+                    ClockThree <= '0';
+                    PipelineHalt <= NO_PIPELINE_HALT;
+                ELSE
+                END IF;
+            END IF;
 
         END IF;
     END PROCESS matchInstruction;
@@ -2142,700 +2184,727 @@ BEGIN
     BEGIN
 
         IF rising_edge(SH2Clock) THEN
+            LatchedClockTwo <= ClockTwo;
+            LatchedClockThree <= ClockThree;
             LatchedPipelineHalt <= PipelineHalt;
         END IF;
 
-        IF CurrentState = FETCH_IR AND rising_edge(SH2Clock) AND LatchedPipelineHalt = NO_PIPELINE_HALT THEN
+        IF CurrentState = FETCH_IR AND rising_edge(SH2Clock) THEN
 
-            SetDefaultExecuteSignals;
-            --  ==================================================================================================
-            -- ARITHMETIC
-            -- ==================================================================================================
-            IF std_match(InstructionReg, ADD_imm_Rn) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write 
+            IF (LatchedPipelineHalt = NO_PIPELINE_HALT) THEN
 
-            ELSIF std_match(InstructionReg, ADD_Rm_Rn) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write 
-
-            ELSIF std_match(InstructionReg, ADDC_Rm_Rn) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write 
-
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value  
-
-            ELSIF std_match(InstructionReg, ADDV_Rm_Rn) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write 
-
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_OVERFLOW); --Load into Status Register the new Carryout
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value                                 --Actually write 
-
-            ELSIF std_match(InstructionReg, SUB_Rm_Rn) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write 
-
-            ELSIF std_match(InstructionReg, SUBC_Rm_Rn) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write 
-
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value                                         --Actually write 
-
-            ELSIF std_match(InstructionReg, SUBV_Rm_Rn) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write 
-
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_OVERFLOW); --Load into Status Register the new Carryout
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value                                            --Actually write 
-
-            ELSIF std_match(InstructionReg, NEG_Rm_Rn) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Update the value    
-            ELSIF std_match(InstructionReg, NEGC_Rm_Rn) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Update the value
-
-                FlagUpdate := RegArrayOutA1;
-
-                FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value   
-
-            ELSIF std_match(InstructionReg, EXTU_B_Rm_Rn) THEN
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(InstructionReg, EXTU_W_Rm_Rn) THEN
-
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(InstructionReg, EXTS_B_Rm_Rn) THEN
-                SignExtBus := (regLen - 1 DOWNTO 8 => SH2ALUResult(7)) & SH2ALUResult(7 DOWNTO 0);
-                SH2RegIn <= SignExtBus; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(InstructionReg, EXTS_W_Rm_Rn) THEN
-                SignExtBus := (regLen - 1 DOWNTO 16 => SH2ALUResult(15)) & SH2ALUResult(15 DOWNTO 0);
-                SH2RegIn <= SignExtBus; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(InstructionReg, DT_Rn) THEN
-                IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
-                    SH2RegIn <= RegArrayOutA1(regLen - 1 DOWNTO 1) & '1';
-                    SH2RegInSel <= REG_SR;
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    SH2RegIn <= RegArrayOutA1(regLen - 1 DOWNTO 1) & '0';
-                    SH2RegInSel <= REG_SR;
-                    SH2RegStore <= REG_STORE;
-                END IF;
-            ELSIF std_match(InstructionReg, CMP_EQ_imm_R0) THEN
-                IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '0';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                END IF;
-            ELSIF std_match(InstructionReg, CMP_EQ_Rm_Rn) THEN
-                IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '0';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                END IF;
-            ELSIF std_match(InstructionReg, CMP_GE_Rm_Rn) THEN
-                IF (std_match(SH2ALUResult, ALU_ZERO_IMM) OR (SH2ALUResult(regLen - 1) = '0')) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '0';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                END IF;
-            ELSIF std_match(InstructionReg, CMP_GT_Rm_Rn) THEN
-                IF ((SH2ALUResult(regLen - 1) = '0') AND (SH2ALUResult /= ALU_ZERO_IMM)) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '0';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                END IF;
-            ELSIF std_match(InstructionReg, CMP_HI_Rm_Rn) THEN
-                IF ((NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1') AND (SH2ALUResult /= ALU_ZERO_IMM)) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '0';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                END IF;
-            ELSIF std_match(InstructionReg, CMP_HS_Rm_Rn) THEN
-                IF (std_match(SH2ALUResult, ALU_ZERO_IMM) OR (NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1')) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '0';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                END IF;
-            ELSIF std_match(InstructionReg, CMP_PL_Rn) THEN
-                IF ((NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1') AND (SH2ALUResult /= ALU_ZERO_IMM)) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '0';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                END IF;
-            ELSIF std_match(InstructionReg, CMP_PZ_Rn) THEN
-                IF (std_match(SH2ALUResult, ALU_ZERO_IMM) OR (NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1')) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '0';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                END IF;
-            ELSIF std_match(InstructionReg, CMP_STR_Rm_Rn) THEN
-                IF (std_match(SH2ALUResult(7 DOWNTO 0), ALU_ZERO_IMM(7 DOWNTO 0)) OR
-                    std_match(SH2ALUResult(15 DOWNTO 8), ALU_ZERO_IMM(7 DOWNTO 0)) OR
-                    std_match(SH2ALUResult(23 DOWNTO 16), ALU_ZERO_IMM(7 DOWNTO 0)) OR
-                    std_match(SH2ALUResult(regLen - 1 DOWNTO 24), ALU_ZERO_IMM(7 DOWNTO 0))) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                ELSE
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '0';
-
-                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                    SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
-                    SH2RegStore <= REG_STORE;
-                END IF;
+                SetDefaultExecuteSignals;
                 --  ==================================================================================================
-                -- SHIFTS (0/8) : Needs testing
-                --  ==================================================================================================
+                -- ARITHMETIC
+                -- ==================================================================================================
+                IF std_match(InstructionReg, ADD_imm_Rn) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write 
 
-            ELSIF std_match(SHLL_Rn, InstructionReg) THEN
-                -- Setting Reg Array control signals
-                FlagUpdate := RegArrayOutA2;
+                ELSIF std_match(InstructionReg, ADD_Rm_Rn) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write 
 
-                FlagUpdate(0) := RegArrayOutA(regLen - 1); --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value  
+                ELSIF std_match(InstructionReg, ADDC_Rm_Rn) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write 
 
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write
-
-            ELSIF std_match(SHLR_Rn, InstructionReg) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) := RegArrayOutA(0); --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value  
-
-            ELSIF std_match(SHAR_Rn, InstructionReg) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) := RegArrayOutA(0); --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value  
-
-            ELSIF std_match(SHAL_Rn, InstructionReg) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) := RegArrayOutA(regLen - 1); --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value  
-
-            ELSIF std_match(ROTCL_Rn, InstructionReg) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) := RegArrayOutA(regLen - 1); --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value                                          --Update the value   
-
-            ELSIF std_match(ROTCR_Rn, InstructionReg) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) := RegArrayOutA(0); --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value  
-
-            ELSIF std_match(ROTL_Rn, InstructionReg) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) := RegArrayOutA(regLen - 1); --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value               
-
-            ELSIF std_match(ROTR_Rn, InstructionReg) THEN
-                -- Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
-                SH2RegStore <= REG_STORE; --Actually write
-
-                FlagUpdate := RegArrayOutA2;
-
-                FlagUpdate(0) := RegArrayOutA(0); --Update the T-bit with the high bit value of Rn  
-                SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
-                SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
-                SH2RegAxStore <= REG_STORE; --Update the value  
-
-                --  ==================================================================================================
-                -- LOGICAL 0/9 Needs testing
-                --  ==================================================================================================
-            ELSIF std_match(AND_Rm_Rn, InstructionReg) THEN
-                --Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(AND_imm_R0, InstructionReg) THEN
-                --Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;
-                SH2RegInSel <= REG_ZEROTH_SEL;
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(TST_Rm_Rn, InstructionReg) THEN
-                IF std_match(SH2ALUResult, REG_LEN_ZEROES) THEN
                     FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1'; --Load into Status Register the new Carryout
-                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register 
-                    SH2RegAxInSel <= REG_SR;
+
+                    FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value  
+
+                ELSIF std_match(InstructionReg, ADDV_Rm_Rn) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                    FlagUpdate := RegArrayOutA1;
+
+                    FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_OVERFLOW); --Load into Status Register the new Carryout
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value                                 --Actually write 
+
+                ELSIF std_match(InstructionReg, SUB_Rm_Rn) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                ELSIF std_match(InstructionReg, SUBC_Rm_Rn) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                    FlagUpdate := RegArrayOutA1;
+
+                    FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value                                         --Actually write 
+
+                ELSIF std_match(InstructionReg, SUBV_Rm_Rn) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                    FlagUpdate := RegArrayOutA1;
+
+                    FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_OVERFLOW); --Load into Status Register the new Carryout
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value                                            --Actually write 
+
+                ELSIF std_match(InstructionReg, NEG_Rm_Rn) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Update the value    
+                ELSIF std_match(InstructionReg, NEGC_Rm_Rn) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Update the value
+
+                    FlagUpdate := RegArrayOutA1;
+
+                    FlagUpdate(0) := NOT FlagBus(FLAG_INDEX_CARRYOUT); --Load into Status Register the new Carryout
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value   
+
+                ELSIF std_match(InstructionReg, EXTU_B_Rm_Rn) THEN
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(InstructionReg, EXTU_W_Rm_Rn) THEN
+
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(InstructionReg, EXTS_B_Rm_Rn) THEN
+                    SignExtBus := (regLen - 1 DOWNTO 8 => SH2ALUResult(7)) & SH2ALUResult(7 DOWNTO 0);
+                    SH2RegIn <= SignExtBus; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(InstructionReg, EXTS_W_Rm_Rn) THEN
+                    SignExtBus := (regLen - 1 DOWNTO 16 => SH2ALUResult(15)) & SH2ALUResult(15 DOWNTO 0);
+                    SH2RegIn <= SignExtBus; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(InstructionReg, DT_Rn) THEN
+                    IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
+                        SH2RegIn <= RegArrayOutA1(regLen - 1 DOWNTO 1) & '1';
+                        SH2RegInSel <= REG_SR;
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        SH2RegIn <= RegArrayOutA1(regLen - 1 DOWNTO 1) & '0';
+                        SH2RegInSel <= REG_SR;
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                ELSIF std_match(InstructionReg, CMP_EQ_imm_R0) THEN
+                    IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '0';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                ELSIF std_match(InstructionReg, CMP_EQ_Rm_Rn) THEN
+                    IF std_match(SH2ALUResult, ALU_ZERO_IMM) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '0';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                ELSIF std_match(InstructionReg, CMP_GE_Rm_Rn) THEN
+                    IF (std_match(SH2ALUResult, ALU_ZERO_IMM) OR (SH2ALUResult(regLen - 1) = '0')) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '0';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                ELSIF std_match(InstructionReg, CMP_GT_Rm_Rn) THEN
+                    IF ((SH2ALUResult(regLen - 1) = '0') AND (SH2ALUResult /= ALU_ZERO_IMM)) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '0';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                ELSIF std_match(InstructionReg, CMP_HI_Rm_Rn) THEN
+                    IF ((NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1') AND (SH2ALUResult /= ALU_ZERO_IMM)) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '0';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                ELSIF std_match(InstructionReg, CMP_HS_Rm_Rn) THEN
+                    IF (std_match(SH2ALUResult, ALU_ZERO_IMM) OR (NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1')) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '0';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                ELSIF std_match(InstructionReg, CMP_PL_Rn) THEN
+                    IF ((NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1') AND (SH2ALUResult /= ALU_ZERO_IMM)) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '0';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                ELSIF std_match(InstructionReg, CMP_PZ_Rn) THEN
+                    IF (std_match(SH2ALUResult, ALU_ZERO_IMM) OR (NOT FlagBus(FLAG_INDEX_CARRYOUT) = '1')) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '0';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                ELSIF std_match(InstructionReg, CMP_STR_Rm_Rn) THEN
+                    IF (std_match(SH2ALUResult(7 DOWNTO 0), ALU_ZERO_IMM(7 DOWNTO 0)) OR
+                        std_match(SH2ALUResult(15 DOWNTO 8), ALU_ZERO_IMM(7 DOWNTO 0)) OR
+                        std_match(SH2ALUResult(23 DOWNTO 16), ALU_ZERO_IMM(7 DOWNTO 0)) OR
+                        std_match(SH2ALUResult(regLen - 1 DOWNTO 24), ALU_ZERO_IMM(7 DOWNTO 0))) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    ELSE
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '0';
+
+                        SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                        SH2RegInSel <= REG_SR; --Set the register to write to (Rn)
+                        SH2RegStore <= REG_STORE;
+                    END IF;
+                    --  ==================================================================================================
+                    -- SHIFTS (0/8) : Needs testing
+                    --  ==================================================================================================
+
+                ELSIF std_match(SHLL_Rn, InstructionReg) THEN
+                    -- Setting Reg Array control signals
+                    FlagUpdate := RegArrayOutA2;
+
+                    FlagUpdate(0) := RegArrayOutA(regLen - 1); --Update the T-bit with the high bit value of Rn  
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value  
+
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write
+
+                ELSIF std_match(SHLR_Rn, InstructionReg) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write
+
+                    FlagUpdate := RegArrayOutA2;
+
+                    FlagUpdate(0) := RegArrayOutA(0); --Update the T-bit with the high bit value of Rn  
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value  
+
+                ELSIF std_match(SHAR_Rn, InstructionReg) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write
+
+                    FlagUpdate := RegArrayOutA2;
+
+                    FlagUpdate(0) := RegArrayOutA(0); --Update the T-bit with the high bit value of Rn  
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value  
+
+                ELSIF std_match(SHAL_Rn, InstructionReg) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write
+
+                    FlagUpdate := RegArrayOutA2;
+
+                    FlagUpdate(0) := RegArrayOutA(regLen - 1); --Update the T-bit with the high bit value of Rn  
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value  
+
+                ELSIF std_match(ROTCL_Rn, InstructionReg) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write
+
+                    FlagUpdate := RegArrayOutA2;
+
+                    FlagUpdate(0) := RegArrayOutA(regLen - 1); --Update the T-bit with the high bit value of Rn  
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value                                          --Update the value   
+
+                ELSIF std_match(ROTCR_Rn, InstructionReg) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write
+
+                    FlagUpdate := RegArrayOutA2;
+
+                    FlagUpdate(0) := RegArrayOutA(0); --Update the T-bit with the high bit value of Rn  
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value  
+
+                ELSIF std_match(ROTL_Rn, InstructionReg) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write
+
+                    FlagUpdate := RegArrayOutA2;
+
+                    FlagUpdate(0) := RegArrayOutA(regLen - 1); --Update the T-bit with the high bit value of Rn  
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value               
+
+                ELSIF std_match(ROTR_Rn, InstructionReg) THEN
+                    -- Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Set the register to write to (Rn)
+                    SH2RegStore <= REG_STORE; --Actually write
+
+                    FlagUpdate := RegArrayOutA2;
+
+                    FlagUpdate(0) := RegArrayOutA(0); --Update the T-bit with the high bit value of Rn  
+                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register   
+                    SH2RegAxInSel <= REG_SR; --Write back at the Status Register index
+                    SH2RegAxStore <= REG_STORE; --Update the value  
+
+                    --  ==================================================================================================
+                    -- LOGICAL 0/9 Needs testing
+                    --  ==================================================================================================
+                ELSIF std_match(AND_Rm_Rn, InstructionReg) THEN
+                    --Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(AND_imm_R0, InstructionReg) THEN
+                    --Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult;
+                    SH2RegInSel <= REG_ZEROTH_SEL;
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(TST_Rm_Rn, InstructionReg) THEN
+                    IF std_match(SH2ALUResult, REG_LEN_ZEROES) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1'; --Load into Status Register the new Carryout
+                        SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register 
+                        SH2RegAxInSel <= REG_SR;
+                        SH2RegAxStore <= REG_STORE;
+                    END IF;
+
+                ELSIF std_match(TST_imm_R0, InstructionReg) THEN
+                    IF std_match(SH2ALUResult, REG_LEN_ZEROES) THEN
+                        FlagUpdate := RegArrayOutA1;
+                        FlagUpdate(0) := '1'; --Load into Status Register the new Carryout
+                        SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register 
+                        SH2RegAxInSel <= REG_SR;
+                        SH2RegAxStore <= REG_STORE;
+                    END IF;
+
+                ELSIF std_match(OR_Rm_Rn, InstructionReg) THEN
+                    --Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(OR_imm_R0, InstructionReg) THEN
+                    --Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult;
+                    SH2RegInSel <= REG_ZEROTH_SEL;
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(XOR_Rm_Rn, InstructionReg) THEN
+                    --Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(XOR_imm_R0, InstructionReg) THEN
+                    --Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult;
+                    SH2RegInSel <= REG_ZEROTH_SEL;
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(NOT_Rm_Rn, InstructionReg) THEN
+                    --Setting Reg Array control signals
+                    SH2RegIn <= SH2ALUResult;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
+                    SH2RegStore <= REG_STORE;
+
+                    --  ==================================================================================================
+                    -- LOAD
+                    --  ==================================================================================================
+
+                    -- Load immediate
+                ELSIF std_match(MOV_IMM_TO_Rn, InstructionReg) THEN
+
+                    -- Store immediate data into Rn
+                    SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(7 DOWNTO 0)), regLen)); -- sign-extended immediate
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                    -- Load from reg address directly
+                ELSIF std_match(MOVB_atRm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    ReadBSetSH2RegIn;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOVW_atRm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    ReadWSetSH2RegIn;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOVL_atRm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    SH2RegIn <= SH2DataBus;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                    -- Load from reg address + reg address in R0
+                ELSIF std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into R0
+                    ReadBSetSH2RegIn;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into R0
+                    ReadWSetSH2RegIn;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    SH2RegIn <= SH2DataBus;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                    -- Load from reg address post-incremented
+                ELSIF std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    ReadBSetSH2RegIn;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                    -- Store new calculated address into Rm
+                    SH2RegAxIn <= DMAUPostIncDecSrc;
+                    SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
                     SH2RegAxStore <= REG_STORE;
-                END IF;
 
-            ELSIF std_match(TST_imm_R0, InstructionReg) THEN
-                IF std_match(SH2ALUResult, REG_LEN_ZEROES) THEN
-                    FlagUpdate := RegArrayOutA1;
-                    FlagUpdate(0) := '1'; --Load into Status Register the new Carryout
-                    SH2RegAxIn <= FlagUpdate; --Write back in Ax which is the Status Register 
-                    SH2RegAxInSel <= REG_SR;
+                ELSIF std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    ReadWSetSH2RegIn;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                    -- Store new calculated address into Rm
+                    SH2RegAxIn <= DMAUPostIncDecSrc;
+                    SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
                     SH2RegAxStore <= REG_STORE;
+
+                ELSIF std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    SH2RegIn <= SH2DataBus;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                    -- Store new calculated address into Rm
+                    SH2RegAxIn <= DMAUPostIncDecSrc;
+                    SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
+                    SH2RegAxStore <= REG_STORE;
+
+                    -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
+                ELSIF std_match(MOVB_atDispRm_TO_R0, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    ReadBSetSH2RegIn;
+                    SH2RegInSel <= 0; -- Store inside register R0
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOVW_atDispRm_TO_R0, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    ReadWSetSH2RegIn;
+                    SH2RegInSel <= 0; -- Store inside register R0
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOVL_atDispRm_TO_Rn, InstructionReg) THEN
+
+                    -- Store data bus data into Rn
+                    SH2RegIn <= SH2DataBus;
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
+                    SH2RegStore <= REG_STORE;
+
+                    -- Load from dis * (1,2,4) + GBR (into R0)
+                ELSIF std_match(MOV_B_R0_GBR, InstructionReg) THEN
+                    -- Store data bus data into R0
+                    ReadBSetSH2RegIn;
+                    SH2RegInSel <= 0; -- Store inside register R0
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOV_W_R0_GBR, InstructionReg) THEN
+
+                    -- Store data bus data into R0
+                    ReadWSetSH2RegIn;
+                    SH2RegInSel <= 0; -- Store inside register R0
+                    SH2RegStore <= REG_STORE;
+
+                ELSIF std_match(MOV_L_R0_GBR, InstructionReg) THEN
+
+                    -- Store data bus data into R0
+                    SH2RegIn <= SH2DataBus; -- sign-extended data bus value
+                    SH2RegInSel <= 0; -- Store inside register R0
+                    SH2RegStore <= REG_STORE;
+
+                    --  ==================================================================================================
+                    -- STORE
+                    --  ==================================================================================================
+
+                    -- Store value in Rm to RAM address in Rn
+                ELSIF std_match(MOVB_Rm_TO_atRn, InstructionReg) THEN
+                ELSIF std_match(MOVW_Rm_TO_atRn, InstructionReg) THEN
+                ELSIF std_match(MOVL_Rm_TO_atRn, InstructionReg) THEN
+
+                    -- Store value in Rm to (RAM address in Rn + RAM address in R0)
+                ELSIF std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) THEN
+                ELSIF std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) THEN
+                ELSIF std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) THEN
+
+                    -- Store value in Rm to (pre decremented RAM address in Rn)
+                ELSIF std_match(MOVB_Rm_TO_atPreDecRn, InstructionReg) THEN
+
+                    -- Update Rn with pre-decremented address
+                    SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                    SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
+                    SH2RegAxStore <= REG_STORE;
+
+                ELSIF std_match(MOVW_Rm_TO_atPreDecRn, InstructionReg) THEN
+
+                    -- Update Rn with pre-decremented address
+                    SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                    SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
+                    SH2RegAxStore <= REG_STORE;
+
+                ELSIF std_match(MOVL_Rm_TO_atPreDecRn, InstructionReg) THEN
+
+                    -- Update Rn with pre-decremented address
+                    SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                    SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
+                    SH2RegAxStore <= REG_STORE;
+
+                    -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*disp)
+                ELSIF std_match(MOVB_R0_TO_atDispRn, InstructionReg) THEN
+                ELSIF std_match(MOVW_R0_TO_atDispRn, InstructionReg) THEN
+                ELSIF std_match(MOVL_Rm_TO_atDispRn, InstructionReg) THEN
+
+                    -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR)
+                ELSIF std_match(MOV_B_GBR_R0, InstructionReg) THEN
+                ELSIF std_match(MOV_W_GBR_R0, InstructionReg) THEN
+                ELSIF std_match(MOV_L_GBR_R0, InstructionReg) THEN
+
+                    --========================================
+                    -- System control
+                    --========================================
+                ELSIF std_match(SETT, InstructionReg) THEN
+                    FlagUpdate := SH2ALUResult;
+                    FlagUpdate(0) := '1';
+                    SH2RegIn <= FlagUpdate; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Write back to the status register
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                ELSIF std_match(LDC_Rm_SR, InstructionReg) THEN
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= REG_SR; --Write back to the status register
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                ELSIF std_match(STC_SR_Rn, InstructionReg) THEN
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
+                    SH2RegStore <= REG_STORE; --Actually write 
+                ELSIF std_match(STC_GBR_Rn, InstructionReg) THEN
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                ELSIF std_match(STC_VBR_Rn, InstructionReg) THEN
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                ELSIF std_match(STS_PR_Rn, InstructionReg) THEN
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
+                    SH2RegStore <= REG_STORE; --Actually write 
+                ELSIF std_match(LDC_Rm_GBR, InstructionReg) THEN
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= REG_GBR; --Write back to the GBR
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                ELSIF std_match(LDC_Rm_VBR, InstructionReg) THEN
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= REG_VBR; --Write back to the VBR
+                    SH2RegStore <= REG_STORE; --Actually write 
+
+                ELSIF std_match(LDS_Rm_PR, InstructionReg) THEN
+                    SH2RegIn <= SH2ALUResult; --Set what data needs to be written
+                    SH2RegInSel <= REG_PR; --Write back to the PR
+                    SH2RegStore <= REG_STORE; --Actually write 
+                ELSIF std_match(JSR_Rm, InstructionReg) THEN
+                    SH2RegIn <= StorePC; --Set what data needs to be written
+                    SH2RegInSel <= REG_PR; --Write back to the PR
+                    SH2RegStore <= REG_STORE; --Actually write 
+                ELSIF std_match(BSR_disp, InstructionReg) THEN
+                    SH2RegIn <= StorePC; --Set what data needs to be written
+                    SH2RegInSel <= REG_PR; --Write back to the PR
+                    SH2RegStore <= REG_STORE; --Actually write 
+                ELSIF std_match(BSRF_Rm, InstructionReg) THEN
+                    SH2RegIn <= StorePC; --Set what data needs to be written
+                    SH2RegInSel <= REG_PR; --Write back to the PR
+                    SH2RegStore <= REG_STORE; --Actually write 
+                    -- ================================
+                    -- System Register Control
+                    -- =================================
                 END IF;
-
-            ELSIF std_match(OR_Rm_Rn, InstructionReg) THEN
-                --Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(OR_imm_R0, InstructionReg) THEN
-                --Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;
-                SH2RegInSel <= REG_ZEROTH_SEL;
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(XOR_Rm_Rn, InstructionReg) THEN
-                --Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(XOR_imm_R0, InstructionReg) THEN
-                --Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;
-                SH2RegInSel <= REG_ZEROTH_SEL;
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(NOT_Rm_Rn, InstructionReg) THEN
-                --Setting Reg Array control signals
-                SH2RegIn <= SH2ALUResult;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8)));
-                SH2RegStore <= REG_STORE;
-
-                --  ==================================================================================================
-                -- LOAD
-                --  ==================================================================================================
-
-                -- Load immediate
-            ELSIF std_match(MOV_IMM_TO_Rn, InstructionReg) THEN
-
-                -- Store immediate data into Rn
-                SH2RegIn <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(7 DOWNTO 0)), regLen)); -- sign-extended immediate
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-                -- Load from reg address directly
-            ELSIF std_match(MOVB_atRm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                ReadBSetSH2RegIn;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(MOVW_atRm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                ReadWSetSH2RegIn;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(MOVL_atRm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                SH2RegIn <= SH2DataBus;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-                -- Load from reg address + reg address in R0
-            ELSIF std_match(MOVB_atR0Rm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into R0
-                ReadBSetSH2RegIn;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(MOVW_atR0Rm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into R0
-                ReadWSetSH2RegIn;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(MOVL_atR0Rm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                SH2RegIn <= SH2DataBus;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-                -- Load from reg address post-incremented
-            ELSIF std_match(MOVB_atPostIncRm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                ReadBSetSH2RegIn;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-                -- Store new calculated address into Rm
-                SH2RegAxIn <= DMAUPostIncDecSrc;
-                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
-                SH2RegAxStore <= REG_STORE;
-
-            ELSIF std_match(MOVW_atPostIncRm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                ReadWSetSH2RegIn;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-                -- Store new calculated address into Rm
-                SH2RegAxIn <= DMAUPostIncDecSrc;
-                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
-                SH2RegAxStore <= REG_STORE;
-
-            ELSIF std_match(MOVL_atPostIncRm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                SH2RegIn <= SH2DataBus;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-                -- Store new calculated address into Rm
-                SH2RegAxIn <= DMAUPostIncDecSrc;
-                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(7 DOWNTO 4))); -- Store inside register Rm
-                SH2RegAxStore <= REG_STORE;
-
-                -- Load from disp * (1,2,4) + reg address (into R0 or Rn)
-            ELSIF std_match(MOVB_atDispRm_TO_R0, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                ReadBSetSH2RegIn;
-                SH2RegInSel <= 0; -- Store inside register R0
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(MOVW_atDispRm_TO_R0, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                ReadWSetSH2RegIn;
-                SH2RegInSel <= 0; -- Store inside register R0
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(MOVL_atDispRm_TO_Rn, InstructionReg) THEN
-
-                -- Store data bus data into Rn
-                SH2RegIn <= SH2DataBus;
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn (at index n)
-                SH2RegStore <= REG_STORE;
-
-                -- Load from dis * (1,2,4) + GBR (into R0)
-            ELSIF std_match(MOV_B_R0_GBR, InstructionReg) THEN
-                -- Store data bus data into R0
-                ReadBSetSH2RegIn;
-                SH2RegInSel <= 0; -- Store inside register R0
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(MOV_W_R0_GBR, InstructionReg) THEN
-
-                -- Store data bus data into R0
-                ReadWSetSH2RegIn;
-                SH2RegInSel <= 0; -- Store inside register R0
-                SH2RegStore <= REG_STORE;
-
-            ELSIF std_match(MOV_L_R0_GBR, InstructionReg) THEN
-
-                -- Store data bus data into R0
-                SH2RegIn <= SH2DataBus; -- sign-extended data bus value
-                SH2RegInSel <= 0; -- Store inside register R0
-                SH2RegStore <= REG_STORE;
-
-                --  ==================================================================================================
-                -- STORE
-                --  ==================================================================================================
-
-                -- Store value in Rm to RAM address in Rn
-            ELSIF std_match(MOVB_Rm_TO_atRn, InstructionReg) THEN
-            ELSIF std_match(MOVW_Rm_TO_atRn, InstructionReg) THEN
-            ELSIF std_match(MOVL_Rm_TO_atRn, InstructionReg) THEN
-
-                -- Store value in Rm to (RAM address in Rn + RAM address in R0)
-            ELSIF std_match(MOVB_Rm_TO_atR0Rn, InstructionReg) THEN
-            ELSIF std_match(MOVW_Rm_TO_atR0Rn, InstructionReg) THEN
-            ELSIF std_match(MOVL_Rm_TO_atR0Rn, InstructionReg) THEN
-
-                -- Store value in Rm to (pre decremented RAM address in Rn)
-            ELSIF std_match(MOVB_Rm_TO_atPreDecRn, InstructionReg) THEN
-
-                -- Update Rn with pre-decremented address
-                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
-                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
-                SH2RegAxStore <= REG_STORE;
-
-            ELSIF std_match(MOVW_Rm_TO_atPreDecRn, InstructionReg) THEN
-
-                -- Update Rn with pre-decremented address
-                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
-                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
-                SH2RegAxStore <= REG_STORE;
-
-            ELSIF std_match(MOVL_Rm_TO_atPreDecRn, InstructionReg) THEN
-
-                -- Update Rn with pre-decremented address
-                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
-                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rn
-                SH2RegAxStore <= REG_STORE;
-
-                -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*disp)
-            ELSIF std_match(MOVB_R0_TO_atDispRn, InstructionReg) THEN
-            ELSIF std_match(MOVW_R0_TO_atDispRn, InstructionReg) THEN
-            ELSIF std_match(MOVL_Rm_TO_atDispRn, InstructionReg) THEN
-
-                -- Store value in R0 to ((RAM address in Rn) + (1,2,4)*GBR)
-            ELSIF std_match(MOV_B_GBR_R0, InstructionReg) THEN
-            ELSIF std_match(MOV_W_GBR_R0, InstructionReg) THEN
-            ELSIF std_match(MOV_L_GBR_R0, InstructionReg) THEN
-
-                --========================================
-                -- System control
-                --========================================
-            ELSIF std_match(SETT, InstructionReg) THEN
-                FlagUpdate := SH2ALUResult;
-                FlagUpdate(0) := '1';
-                SH2RegIn <= FlagUpdate; --Set what data needs to be written
-                SH2RegInSel <= REG_SR; --Write back to the status register
-                SH2RegStore <= REG_STORE; --Actually write 
-
-            ELSIF std_match(LDC_Rm_SR, InstructionReg) THEN
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= REG_SR; --Write back to the status register
-                SH2RegStore <= REG_STORE; --Actually write 
-
-            ELSIF std_match(STC_SR_Rn, InstructionReg) THEN
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
-                SH2RegStore <= REG_STORE; --Actually write 
-            ELSIF std_match(STC_GBR_Rn, InstructionReg) THEN
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
-                SH2RegStore <= REG_STORE; --Actually write 
-
-            ELSIF std_match(STC_VBR_Rn, InstructionReg) THEN
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
-                SH2RegStore <= REG_STORE; --Actually write 
-
-            ELSIF std_match(STS_PR_Rn, InstructionReg) THEN
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); --Write back to the Rn
-                SH2RegStore <= REG_STORE; --Actually write 
-            ELSIF std_match(LDC_Rm_GBR, InstructionReg) THEN
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= REG_GBR; --Write back to the GBR
-                SH2RegStore <= REG_STORE; --Actually write 
-
-            ELSIF std_match(LDC_Rm_VBR, InstructionReg) THEN
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= REG_VBR; --Write back to the VBR
-                SH2RegStore <= REG_STORE; --Actually write 
-
-            ELSIF std_match(LDS_Rm_PR, InstructionReg) THEN
-                SH2RegIn <= SH2ALUResult; --Set what data needs to be written
-                SH2RegInSel <= REG_PR; --Write back to the PR
-                SH2RegStore <= REG_STORE; --Actually write 
-            ELSIF std_match(JSR_Rm, InstructionReg) THEN
-                SH2RegIn <= StorePC; --Set what data needs to be written
-                SH2RegInSel <= REG_PR; --Write back to the PR
-                SH2RegStore <= REG_STORE; --Actually write 
-            ELSIF std_match(BSR_disp, InstructionReg) THEN
-                SH2RegIn <= StorePC; --Set what data needs to be written
-                SH2RegInSel <= REG_PR; --Write back to the PR
-                SH2RegStore <= REG_STORE; --Actually write 
-            ELSIF std_match(BSRF_Rm, InstructionReg) THEN
-                SH2RegIn <= StorePC; --Set what data needs to be written
-                SH2RegInSel <= REG_PR; --Write back to the PR
-                SH2RegStore <= REG_STORE; --Actually write 
-                -- ================================
-                -- System Register Control
-                -- =================================
-            ELSIF std_match(STC_L_SR_Rn, InstructionReg) AND ClockTwo = '1' THEN
             END IF;
+
+                --===============================================
+                -- Instructions that can run during pipeline halt
+                --================================================
+            IF std_match(STC_L_SR_Rn, MultiClockReg) AND ClockTwo = '1' THEN
+                -- Update Rn with pre-decremented address
+                SH2RegAxIn <= SH2CalculatedDataAddress; -- address has been incremented
+                SH2RegAxInSel <= to_integer(unsigned(MultiClockReg(11 DOWNTO 8))); -- Store inside register Rn
+                SH2RegAxStore <= REG_STORE;
+
+            ELSIF std_match(LDC_L_Rm_SR, MultiClockReg) AND ClockTwo = '1' THEN
+                -- Update SR with loaded-from-memory value
+                -- Store data bus data into Rn
+                SH2RegIn <= SH2DataBus and SR_MASK;
+                SH2RegInSel <= REG_SR; -- Store inside SR
+                SH2RegStore <= REG_STORE;
+
+                -- Store new calculated address into Rm
+                SH2RegAxIn <= DMAUPostIncDecSrc;
+                SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rm
+                SH2RegAxStore <= REG_STORE;
+            END IF;
+
 
         END IF;
     END PROCESS executeInstruction;

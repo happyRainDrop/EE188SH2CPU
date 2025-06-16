@@ -26,7 +26,7 @@ package SH2PMAUConstants is
 
   -- Register and word size configuration
   constant regLen       : integer := 32;   -- Each register is 32 bits
-  constant regCount     : integer := 18;   -- 16 general + 2 special registers
+  constant regCount     : integer := 20;   -- 16 general + 4 special registers
 
   -- PMAU configuration
   constant pmauSourceCount  : integer := 4;    -- from reg array, PC, or immediate
