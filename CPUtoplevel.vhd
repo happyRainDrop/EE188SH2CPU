@@ -40,12 +40,16 @@
 --                                  Made intermediate variables for MOV reg outputs.
 --     11 June 25 Ruth Berkun       Update addressbus to reflect 4*PC value (Each longword is 4 apart in memory address now) 
 --     11 June 25 Nerissa Finnen    Updated all Shift commands to new style
+--     12 June 25 Nerissa Finnen    Added all ALU commands (arithmetic mostly), 
 --     12 June 25 Ruth Berkun       Implementing MOV commands (load and store)
 --     12 June 25 Ruth Berkun       JMP working and tested, also put GBR and VBR back into RegArray
+--     13 June 25 Nerissa Finnen    Some system control commands, and LDC/STS and Branches
 --     15 June 25 Ruth Berkun       Add LDS.L and STC.L (Pipeline halt logic)
 --     16 June 25 Ruth Berkun       Tested LDS.L and STC.L, required ClockTwo and ClockThree to be latched
 --                                  (checking the versions of ClockTwo and ClockThree that only update on rising edge of 
 --                                   next clock)
+--     17 June 25 Nerissa Finnen    (Happy Birthday to me again!!!) Finished BT BF, gave up on ALU uses addressing to memory 
+--                                  and did not want to learn
 ----------------------------------------------------------------------------
 
 ------------------------------------------------- Constants
