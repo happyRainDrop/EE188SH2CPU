@@ -196,6 +196,9 @@ PACKAGE SH2_CPU_Constants IS
     CONSTANT WORD_MASK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000011111111";
     CONSTANT BYTE_MASK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000001111111111111111";
     CONSTANT SR_MASK : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000001111110011";
+    CONSTANT PIPELINE_HALT : STD_LOGIC := '1';
+    CONSTANT NO_PIPELINE_HALT : STD_LOGIC := '0';
+    CONSTANT SKIP_TWO_INSTRUCTIONS : STD_LOGIC_VECTOR(31 DOWNTO 0) := "00000000000000000000000000000010";
 END SH2_CPU_Constants;
 
 LIBRARY ieee;
@@ -496,9 +499,6 @@ ARCHITECTURE Structural OF CPUtoplevel IS
     SIGNAL DummyPc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the new PC value to load
     SIGNAL StorePc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the old PC value to push to PR
     SIGNAL OffsetPc : STD_LOGIC_VECTOR(regLen - 1 DOWNTO 0); --Holds the offset PC value to load
-
-    CONSTANT PIPELINE_HALT : STD_LOGIC := '1';
-    CONSTANT NO_PIPELINE_HALT : STD_LOGIC := '0';
     SIGNAL PipelineHalt : STD_LOGIC := NO_PIPELINE_HALT; -- active high: 1 to halt, 0 to not halt
     SIGNAL LatchedPipelineHalt : STD_LOGIC := NO_PIPELINE_HALT; -- clock-latched version of PipelineHalt
 BEGIN
@@ -651,6 +651,19 @@ BEGIN
             SH2PC <= SH2PC_next;
         END PROCEDURE;
 
+        PROCEDURE PCAddOffset IS
+        BEGIN
+            SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
+            SH2PMAUOffsetSel <= PMAU_OFFSET_SEL_IMM_OFFSET_x1;
+            SH2PMAUIncDecSel <= DEFAULT_DEC_SEL;
+            SH2PMAUIncDecBit <= DEFAULT_BIT;
+            SH2PMAUPrePostSel <= DEFAULT_POST_SEL;
+            PMAUImmediateSource <= DMAU_ZERO_IMM;
+            PMAUImmediateOffset <= OffsetPC;
+            SH2PC <= SH2PC_next;
+
+        END PROCEDURE;
+
         PROCEDURE PCLoadRegisterOffset IS
         BEGIN
             SH2PMAUSrcSel <= PMAU_SRC_SEL_PC;
@@ -728,11 +741,11 @@ BEGIN
                         ELSIF std_match(RTS, MultiClockReg) THEN
                             PCLoadImmediate; --Load the PR address to jump back to
                         ELSIF std_match(BT_disp, MultiClockReg) THEN
-                            PCLoadImmediate; --IDK
+                            PCLoadTwoXOffset; --Load the 2x displacement into offset to jump to
                         ELSIF std_match(BT_S_disp, MultiClockReg) THEN
                             PCLoadTwoXOffset; --Load the 2x displacement into offset to jump to; 
                         ELSIF std_match(BF_disp, MultiClockReg) THEN
-                            PCLoadImmediate; --IDK
+                            PCLoadTwoXOffset; --Load the 2x displacement into offset to jump to
                         ELSIF std_match(BF_S_disp, MultiClockReg) THEN
                             PCLoadTwoXOffset; --Load the 2x displacement into offset to jump to
                         ELSIF std_match(BRA_disp, MultiClockReg) THEN
@@ -745,7 +758,13 @@ BEGIN
                             PCLoadImmediate; --IDK
                         ELSE
                         END IF;
-
+                        IF (ClockThree = '1') THEN
+                            IF std_match(BT_disp, MultiClockReg) THEN
+                                PCAddOffset; --Add two instruction skip offset to jump to
+                            ELSIF std_match(BF_disp, MultiClockReg) THEN
+                                PCAddOffset; --Add two instruction skip offset to jump to
+                            END IF;
+                        END IF;
                     ELSE
 
                     END IF;
@@ -1936,6 +1955,9 @@ BEGIN
                 SH2RegA1Sel <= REG_SR;
                 IF RegArrayOutA1(0) = '0' THEN
                     ClockTwo <= '1';
+                    OffsetPc <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                    PipelineHalt <= PIPELINE_HALT;
+                    MultiClockReg <= InstructionReg;
                 ELSE
                     SetDefaultControlSignals;
                 END IF;
@@ -1945,6 +1967,7 @@ BEGIN
                 IF RegArrayOutA1(0) = '0' THEN
                     ClockTwo <= '1';
                     OffsetPc <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                    PipelineHalt <= PIPELINE_HALT;
                     MultiClockReg <= InstructionReg;
                 ELSE
                     SetDefaultControlSignals;
@@ -1964,6 +1987,9 @@ BEGIN
                 SH2RegA1Sel <= REG_SR;
                 IF RegArrayOutA1(0) = '1' THEN
                     ClockTwo <= '1';
+                    OffsetPc <= STD_LOGIC_VECTOR(resize(signed(InstructionReg(3 DOWNTO 0)), regLen)); -- sign-extended immediate
+                    PipelineHalt <= PIPELINE_HALT;
+                    MultiClockReg <= InstructionReg;
                 ELSE
                     SetDefaultControlSignals;
                 END IF;
@@ -2204,6 +2230,11 @@ BEGIN
                 ELSIF std_match(BT_disp, MultiClockReg) THEN
                     ClockTwo <= '0';
                     ClockThree <= '1'; --Set the third clock
+                    OffsetPc <= SKIP_TWO_INSTRUCTIONS; --Set the two instruction skip
+                ELSIF std_match(BF_disp, MultiClockReg) THEN
+                    ClockTwo <= '0';
+                    ClockThree <= '1'; --Set the third clock
+                    OffsetPc <= SKIP_TWO_INSTRUCTIONS; --Set the two instruction skip
                 ELSIF std_match(BT_S_disp, MultiClockReg) THEN
                     ClockTwo <= '0';
                 ELSIF std_match(BRA_disp, MultiClockReg) THEN
@@ -2268,9 +2299,10 @@ BEGIN
                     ClockThree <= '0';
                 ELSIF std_match(BT_disp, MultiClockReg) THEN
                     ClockThree <= '0';
+                    PipelineHalt <= NO_PIPELINE_HALT;
                 ELSIF std_match(BF_disp, MultiClockReg) THEN
                     ClockThree <= '0';
-
+                    PipelineHalt <= NO_PIPELINE_HALT;
                 ELSIF std_match(LDC_L_Rm_SR, MultiClockReg) THEN
                     -- last clock: unpause pipeline
                     ClockTwo <= '0';
@@ -3169,6 +3201,9 @@ BEGIN
                 SH2RegAxIn <= DMAUPostIncDecSrc;
                 SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rm
                 SH2RegAxStore <= REG_STORE;
+            ELSIF std_match(BT_disp MultiClockReg) AND ClockTwo = '1' THEN
+
+            ELSIF std_match(BF_disp MultiClockReg) AND ClockTwo = '1' THEN
 
             END IF;
 
