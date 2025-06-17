@@ -77,15 +77,20 @@ We have 4 blocks of memory. Each block of memory consists of 256 (adjustable) lo
 Our first block of memory is reserved as codespace. We put one instruction in the lower word each longword. Thus, when we increment our PC to go though codespace, we use PCx4 to find the right memory address.
 Basically, the programmer and PC is thinking, I am putting an instruction at codespace 0, 1, 2, 3..., and the control unit is thinking, I need to grab the instructions from memory address 0, 4, 8...
 
-Our second block of memory is reserved as data space and our third block of memory is reserved as stack space. It is up to the programmer to make sure data and stack information is only stored in their corresponding memory blocks.
+Our second block of memory is reserved as data space and our third block of memory is reserved as stack space. It is up to the programmer to make sure data and stack information is only stored in their corresponding memory blocks. The fourth block of memory is not used.
 
-We perform memory accesses on the falling edge of the clock so that memory data and addresses can be precalculated during the rising edge of the clock (when we first fetch our instructions).
+Our finite state machine, in `CPUtoplevel.vhd` in the process `updatePCandIRandSetNextState,` handles all the memory interfacing. It is the only place we update the PC via setting Program Memory Access Unit control signals. And it is the only place where we set `WE` and `RE` signals that interface to our similated RAM in `memory.vhd`. 
+
+The finite state machine has three states, one for before we've read in any instructions, one when we are actively executing a program, and one when we are done with the program. The first and last state open the address and data bus so that the testing unit can use it to write code to RAM or read the RAM to dump its contents.
+In the second state, we perform memory accesses on the falling edge of the clock so that memory data and addresses can be precalculated during the rising edge of the clock (when we first fetch our instructions).
+
+The finite state machine is a clocked process, as is the process where we set our control signals. Therefore, we make the `SH2AddressBus`, `SH2DataBus`, and `InstructionReg` update combinationally based on control signals. This way, we can change these signals multiple times in a clock. We can open the data bus to read in the IR on the rising edge of the clock, and set it to a register's value to store to memory on the falling edge of the clock, for example. `InstructionReg` is combinational so that it can immediately latch to the fetched instruction on the `SH2DataBus` bus.
 
 ## Pipelining ##
 We have a two-stage pipeline: fetch, decode, and pre-calculated needed information on one clock, and execute on the following clock.
 (Pre-calculating information includes calculating memory addresses/data bus values, memory accesses, determining which register to store things in, etc).
 
-We have two processes to handle this two-stage pipelien: `matchInstruction` and `executeInstruction`.This is where our design becomes a bit flimsy. Earlier in our design when we were doing memory accesses during the following clock, we somehow needed the register outputs to update instantenously after setting a register select signal. So we unclocked the registers.
+We have two processes to handle this two-stage pipeline: `matchInstruction` and `executeInstruction`.This is where our design becomes a bit flimsy. Earlier in our design when we were doing memory accesses during the following clock, we somehow needed the register outputs to update instantenously after setting a register select signal. So we unclocked the registers.
 Now, with loads and stores happening during the `matchInstruction` first clock, all `exectueInstruction` does is set register store signals. A redesign could involve moving all the register store signals into `matchInstruction` and clocking the registers, so that the register outputs are updated on the next clock without need for another process.
 
 For multi-clock instructions: We need the ability to cancel executions and halt the pipeline.
