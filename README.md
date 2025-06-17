@@ -235,6 +235,11 @@ Our `matchInstruction` process only updates on IR changes, so we have latched ve
 ## Unimplemented Instructions
 - SLEEP 
 - CLRT
+- AND.B #imm @(R0 + GBR)
+- OR.B #imm @(R0 + GBR)
+- NOT.B #imm @(R0 + GBR)
+- XOR.B #imm @(R0 + GBR)
+- TAS.B @Rn
 - RTE
 - TRAPA
 - CLRMAC
