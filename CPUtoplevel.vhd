@@ -2275,8 +2275,24 @@ BEGIN
                     -- this is the last clock cycle of this instruction
                     ClockTwo <= '0';
                     PipelineHalt <= NO_PIPELINE_HALT;
+                ELSIF std_match(STC_L_GBR_Rn, MultiClockReg) THEN
+                    -- this is the last clock cycle of this instruction
+                    ClockTwo <= '0';
+                    PipelineHalt <= NO_PIPELINE_HALT;
+                ELSIF std_match(STC_L_VBR_Rn, MultiClockReg) THEN
+                    -- this is the last clock cycle of this instruction
+                    ClockTwo <= '0';
+                    PipelineHalt <= NO_PIPELINE_HALT;
 
                 ELSIF std_match(LDC_L_Rm_SR, MultiClockReg) THEN
+                    -- Clock update stuff
+                    ClockTwo <= '0';
+                    ClockThree <= '1';
+                ELSIF std_match(LDC_L_Rm_GBR, MultiClockReg) THEN
+                    -- Clock update stuff
+                    ClockTwo <= '0';
+                    ClockThree <= '1';
+                ELSIF std_match(LDC_L_Rm_VBR, MultiClockReg) THEN
                     -- Clock update stuff
                     ClockTwo <= '0';
                     ClockThree <= '1';
@@ -2308,6 +2324,16 @@ BEGIN
                     ClockThree <= '0';
                     PipelineHalt <= NO_PIPELINE_HALT;
                 ELSIF std_match(LDC_L_Rm_SR, MultiClockReg) THEN
+                    -- last clock: unpause pipeline
+                    ClockTwo <= '0';
+                    ClockThree <= '0';
+                    PipelineHalt <= NO_PIPELINE_HALT;
+                ELSIF std_match(LDC_L_Rm_VBR, MultiClockReg) THEN
+                    -- last clock: unpause pipeline
+                    ClockTwo <= '0';
+                    ClockThree <= '0';
+                    PipelineHalt <= NO_PIPELINE_HALT;
+                ELSIF std_match(LDC_L_Rm_GBR, MultiClockReg) THEN
                     -- last clock: unpause pipeline
                     ClockTwo <= '0';
                     ClockThree <= '0';
@@ -3205,9 +3231,9 @@ BEGIN
                 SH2RegAxIn <= DMAUPostIncDecSrc;
                 SH2RegAxInSel <= to_integer(unsigned(InstructionReg(11 DOWNTO 8))); -- Store inside register Rm
                 SH2RegAxStore <= REG_STORE;
-            ELSIF std_match(BT_disp MultiClockReg) AND ClockTwo = '1' THEN
+            ELSIF std_match(BT_disp, MultiClockReg) AND ClockTwo = '1' THEN
 
-            ELSIF std_match(BF_disp MultiClockReg) AND ClockTwo = '1' THEN
+            ELSIF std_match(BF_disp, MultiClockReg) AND ClockTwo = '1' THEN
 
             END IF;
 
